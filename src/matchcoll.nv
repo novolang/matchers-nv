@@ -1,0 +1,247 @@
+// matchcoll.nv — the matchers over a list.
+//
+// A COLLECTION ASSERTION SHOULD SAY WHICH ELEMENT, AND MOST DO NOT.
+// `test.assert(list.len(xs) == 3)` fails with "expected true"; even
+// `assert_eq(xs, ys)` prints two whole lists and leaves a person to find
+// the difference.  Every matcher here fails with the smallest true
+// statement it can make — `"was a list of length 2"`, `"had no element
+// equal to 7"`, `"element 3 was 9"` — because that is the sentence a
+// person needed and the rest is noise they have to read past.
+//
+// ORDER IS A SEPARATE QUESTION FROM MEMBERSHIP, and this module keeps
+// them apart on purpose.  `contains_all` says the elements are there and
+// says nothing about where; `in_order` says they appear in that order,
+// with anything allowed between; `equal_list` says the list is exactly
+// that list.  A test that used the strictest of the three when it meant
+// the loosest is a test that breaks when somebody changes a sort, and it
+// breaks in a way that looks like a real failure.
+//
+// `every_item` AND `any_item` TAKE A MATCHER, which is what makes the
+// combinators worth having: `every_item(matchvalue.at_least(0))` reads
+// as what it means, and the failure names the element that was negative
+// rather than saying the list failed.
+//
+// THE ELEMENT TYPE NEEDS `Debug` AND NOT MUCH ELSE.  A length check
+// needs nothing at all; membership needs `Eq` to compare and `Debug` to
+// print what it did not find.  SPEC § 3.8.1 gives `Debug` to every
+// struct and enum whose fields have it, so a list of a caller's own type
+// works without the caller writing a formatter.
+
+use matchers
+
+// A list of exactly `n` elements.
+//
+// The most common collection assertion there is, and the one whose
+// failure is worst without a matcher: `"was a list of length 2"` rather
+// than `"expected true"`.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.has_len(3)
+//     println(matchers.describe_mismatch(m, [1, 2]))
+//     // : was a list of length 2
+// ```
+pub fn has_len<T>(n: Int) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.has_len")
+
+// A list with no elements.
+//
+// `has_len(0)` says the same thing; this reads better and its failure
+// says how many there were, which is the first thing a person asks.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.is_empty()
+//     println("${matchers.matches(m, [])}")                 // true
+// ```
+pub fn is_empty<T>() -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.is_empty")
+
+// A list with at least one element.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.is_not_empty()
+//     println("${matchers.matches(m, [])}")                 // false
+// ```
+pub fn is_not_empty<T>() -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.is_not_empty")
+
+// A list containing this element, anywhere.
+//
+// Membership only: it says nothing about position or about what else is
+// there.  `in_order` is the ordered question and `equal_list` the exact
+// one.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.contains(7)
+//     println(matchers.describe(m))
+//     // : a list containing 7
+// ```
+pub fn contains<T: Eq + Debug>(want: T) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.contains")
+
+// A list containing every one of these, anywhere, in any order.
+//
+// The failure names what was MISSING rather than printing the list,
+// which is the difference between a message a person acts on and one
+// they have to diff by eye.  Duplicates in `wanted` are not counted: a
+// list containing one 7 satisfies `contains_all([7, 7])`, because this
+// is set membership and a test that meant multiplicity means
+// `equal_list` or a count.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.contains_all([2, 9])
+//     println(matchers.describe_mismatch(m, [1, 2]))
+//     // : did not contain 9
+// ```
+pub fn contains_all<T: Eq + Debug>(wanted: [T]) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.contains_all")
+
+// A list containing none of these.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.contains_none([9])
+//     println("${matchers.matches(m, [1, 2])}")             // true
+// ```
+pub fn contains_none<T: Eq + Debug>(unwanted: [T]) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.contains_none")
+
+// A list whose elements are exactly these, in this order.
+//
+// The strictest of the three, and the one a test should reach for last:
+// it breaks when somebody changes a sort, and it breaks looking like a
+// real failure.  Its mismatch names the first index that differed and
+// both values there, rather than printing two lists.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.equal_list([1, 2])
+//     println(matchers.describe_mismatch(m, [1, 3]))
+//     // : element 1 was 3
+// ```
+pub fn equal_list<T: Eq + Debug>(want: [T]) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.equal_list")
+
+// A list in which these appear in this order, with anything between.
+//
+// The middle of the three, and the right one for "the log has these
+// lines in this sequence" or "the events arrived in this order" — where
+// the order is the assertion and the rest of the list is not.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.in_order([1, 3])
+//     println("${matchers.matches(m, [1, 2, 3])}")          // true
+// ```
+pub fn in_order<T: Eq + Debug>(want: [T]) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.in_order")
+
+// Every element matches.
+//
+// An empty list matches, which is the convention every quantifier has
+// and the one that occasionally surprises: `every_item(is_positive)`
+// over `[]` is true.  A test that meant "and there is at least one"
+// composes `matchcombine.both(is_not_empty(), every_item(m))`.
+//
+// The failure names the index and the element's own mismatch — `"element
+// 3: was -1"` — which is what makes this worth more than a loop with an
+// assertion in it.
+//
+// ```novo
+// use matchers
+// use matchcoll
+// use matchvalue
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.every_item(matchvalue.at_least(0))
+//     println(matchers.describe_mismatch(m, [1, 0 - 1]))
+//     // : element 1 was -1
+// ```
+pub fn every_item<T>(m: Matcher<T>) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.every_item")
+
+// At least one element matches.
+//
+// An empty list does not match.  The failure says how many elements
+// were judged and that none of them matched, because "no element
+// matched" over an empty list and over a list of forty are different
+// situations and a person reading the message needs to know which.
+//
+// ```novo
+// use matchers
+// use matchcoll
+// use matchvalue
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.any_item(matchvalue.greater_than(2))
+//     println("${matchers.matches(m, [1, 2, 3])}")          // true
+// ```
+pub fn any_item<T>(m: Matcher<T>) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.any_item")
+
+// The element at an index matches.
+//
+// An index outside the list does not match, and says the length rather
+// than saying the element did not match — which is the distinction a
+// person debugging an off-by-one needs and never gets from an index
+// assertion written by hand.
+//
+// ```novo
+// use matchers
+// use matchcoll
+// use matchvalue
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.item_at(5, matchvalue.equal_to(1))
+//     println(matchers.describe_mismatch(m, [1, 2]))
+//     // : was a list of length 2, with no element 5
+// ```
+pub fn item_at<T>(index: Int, m: Matcher<T>) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.item_at")
+
+// A list whose length matches.
+//
+// `has_len` for a bound rather than an exact number:
+// `has_length_that(matchvalue.between(1, 10))`.  Separate from `has_len`
+// because the exact case is the overwhelmingly common one and should
+// not cost a nested matcher at every call site.
+//
+// ```novo
+// use matchers
+// use matchcoll
+// use matchvalue
+//
+// fn main() [io]
+//     let m: Matcher<[Int]> = matchcoll.has_length_that(matchvalue.at_least(1))
+//     println("${matchers.matches(m, [1, 2])}")             // true
+// ```
+pub fn has_length_that<T>(m: Matcher<Int>) -> Matcher<[T]>
+    todo("matchers-nv.matchcoll.has_length_that")

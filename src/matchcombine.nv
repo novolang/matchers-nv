@@ -1,0 +1,192 @@
+// matchcombine.nv — the combinators: matchers built out of matchers.
+//
+// THIS MODULE IS THE ARGUMENT FOR THE WHOLE PACKAGE.  A single
+// assertion is `test.assert(a == b)` and needs nothing.  What needs a
+// library is the one that says four things about a value and, when it
+// fails, says which of the four and what was there instead:
+//
+//     matchers.assert_that(port, matchcombine.all_of([
+//         matchvalue.at_least(1),
+//         matchvalue.at_most(65535),
+//         matchvalue.not_equal_to(0),
+//     ]))
+//
+// A failure from that names the clause that failed, not the whole
+// conjunction — which is the difference between "expected true" and
+// "expected at most 65535, but was 70000".
+//
+// `all_of` SHORT-CIRCUITS AND `any_of` DOES NOT, and that asymmetry is
+// on purpose.  `all_of` stops at the first failure because the
+// remaining clauses are about a value already known to be wrong, and
+// reporting five reasons when the first explains it is noise.  `any_of`
+// runs every alternative because a failure there has to say what ALL of
+// them wanted — "expected one of: a, b, c, but was d" — and it cannot
+// know which alternative the caller had in mind.
+//
+// EVERY COMBINATOR TAKES A LIST RATHER THAN TWO ARGUMENTS.  `both(a, b)`
+// and `either(a, b)` are here because they read better for exactly two,
+// and they are defined as the list forms rather than the other way
+// round: one implementation, and a caller with three clauses does not
+// have to nest.
+
+use matchers
+
+// Every one of them.
+//
+// Short-circuits: the failure names the first clause that did not
+// match, and the description is the clauses joined with "and".  An
+// empty list matches everything, which is the identity `matchers.anything`
+// also gives.
+//
+// ```novo
+// use matchers
+// use matchcombine
+// use matchvalue
+//
+// fn main() [io]
+//     let m = matchcombine.all_of([matchvalue.at_least(1), matchvalue.at_most(9)])
+//     println(matchers.describe_mismatch(m, 10))
+//     // : was 10
+// ```
+pub fn all_of<T>(ms: [Matcher<T>]) -> Matcher<T>
+    todo("matchers-nv.matchcombine.all_of")
+
+// At least one of them.
+//
+// Does NOT short-circuit: every alternative is judged, because a
+// failure has to say what all of them wanted.  An empty list matches
+// nothing, which is the identity `matchers.nothing_at_all` also gives.
+//
+// ```novo
+// use matchers
+// use matchcombine
+// use matchvalue
+//
+// fn main() [io]
+//     let m = matchcombine.any_of([matchvalue.equal_to(2), matchvalue.equal_to(3)])
+//     println("${matchers.matches(m, 3)}")                  // true
+// ```
+pub fn any_of<T>(ms: [Matcher<T>]) -> Matcher<T>
+    todo("matchers-nv.matchcombine.any_of")
+
+// Not this one.
+//
+// Named `is_not` rather than `not`, because `not` is the language's
+// boolean operator and a function cannot take the name.  The
+// description is the inner matcher's with "not" in front, which reads
+// acceptably for everything and well for nothing — a caller who wants a
+// good sentence out of a negation uses `matchers.described_as`, and
+// `matchvalue.not_equal_to` exists because the negation of equality was
+// common enough to deserve its own words.
+//
+// The mismatch of a negated matcher is the hard one: what a reader
+// needs is not "it did not fail to match" but the value itself, so the
+// clause is `"was ${value}"` with the inner matcher's own description
+// of what it saw appended when it has one.
+//
+// ```novo
+// use matchers
+// use matchcombine
+// use matchvalue
+//
+// fn main() [io]
+//     println("${matchers.matches(matchcombine.is_not(matchvalue.equal_to(4)), 5)}")
+//     // true
+// ```
+pub fn is_not<T>(m: Matcher<T>) -> Matcher<T>
+    todo("matchers-nv.matchcombine.is_not")
+
+// Both of them.
+//
+// `all_of` for exactly two, because two is the common case and
+// `both(a, b)` reads better than a list of two at a call site.
+//
+// ```novo
+// use matchers
+// use matchcombine
+// use matchvalue
+//
+// fn main() [io]
+//     let m = matchcombine.both(matchvalue.at_least(1), matchvalue.at_most(9))
+//     println("${matchers.matches(m, 5)}")                  // true
+// ```
+pub fn both<T>(a: Matcher<T>, b: Matcher<T>) -> Matcher<T>
+    todo("matchers-nv.matchcombine.both")
+
+// One or the other.
+//
+// `any_of` for exactly two.
+//
+// ```novo
+// use matchers
+// use matchcombine
+// use matchvalue
+//
+// fn main() [io]
+//     let m = matchcombine.either(matchvalue.equal_to(2), matchvalue.equal_to(3))
+//     println("${matchers.matches(m, 4)}")                  // false
+// ```
+pub fn either<T>(a: Matcher<T>, b: Matcher<T>) -> Matcher<T>
+    todo("matchers-nv.matchcombine.either")
+
+// A matcher over the part of a value another function extracts.
+//
+// **This is `has_field`, and the language is why it does not take a
+// field NAME.**  hamcrest's `hasProperty("total", equalTo(42))` looks
+// up a field by string at run time, which needs reflection; this
+// language has none, and it has no row polymorphism either, so
+// `fn has_field<T>(name: Str, …) -> Matcher<T>` cannot be written at
+// all — there is no way for a body to get from a `Str` to a field of an
+// arbitrary `T`.
+//
+// What CAN be written is the same idea with the projection named
+// instead of the field: the caller passes `fn(T) -> F`, which is a
+// field access it writes itself, plus the label to print.  It costs one
+// short function per field and it is checked by the compiler, which the
+// string form never is — a typo in `"totl"` is a run-time failure in
+// hamcrest and a compile error here.
+//
+// ```novo
+// use matchers
+// use matchcombine
+// use matchvalue
+//
+// struct Invoice
+//     total: Int
+//
+// fn invoice_total(i: Invoice) -> Int
+//     i.total
+//
+// fn main() [io]
+//     // The binding is annotated because a named function passed where
+//     // `fn(T) -> F` is expected does not close `T` or `F` today.
+//     let want: Matcher<Int> = matchvalue.equal_to(42)
+//     let m: Matcher<Invoice> = matchcombine.field_of("total", invoice_total, want)
+//     println(matchers.describe(m))
+//     // : total equal to 42
+// ```
+pub fn field_of<T, F>(label: Str, read: fn(T) -> F, inner: Matcher<F>) -> Matcher<T>
+    todo("matchers-nv.matchcombine.field_of")
+
+// A matcher over a value another function derives.
+//
+// The same shape as `field_of` with no label: for a projection that is
+// a computation rather than a field — the length of something, the
+// second element, a parsed form — where naming it "field" would be a
+// lie.  The description is the inner matcher's, so the caller usually
+// wraps the result in `matchers.described_as`.
+//
+// ```novo
+// use matchers
+// use matchcombine
+// use matchvalue
+//
+// fn doubled(n: Int) -> Int
+//     n * 2
+//
+// fn main() [io]
+//     let m: Matcher<Int> = matchcombine.after(doubled, matchvalue.equal_to(10))
+//     println("${matchers.matches(m, 5)}")                  // true
+// ```
+pub fn after<T, F>(read: fn(T) -> F, inner: Matcher<F>) -> Matcher<T>
+    todo("matchers-nv.matchcombine.after")

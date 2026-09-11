@@ -1,0 +1,251 @@
+// matchers_tests.nv — the API suite for the representation, the
+// combinators, and the sentence a failure reads as.
+//
+// RED ON PURPOSE: every body under `src/` is a `todo()`, so every
+// assertion here reaches `not implemented: matchers-nv.<module>.<fn>`.
+//
+// WHAT IS BEING ASSERTED IS THE SENTENCE.  A matcher library's whole
+// claim is that its failures read, so the tests below are mostly
+// assertions about strings: what `describe` says, what
+// `describe_mismatch` says, and what the two become when `failure_text`
+// joins them.  A matcher that judged correctly and described itself
+// badly would pass a suite that only checked `matches`, and it would be
+// a package nobody wanted.
+//
+// THE ORACLE IS HAMCREST'S OWN VOCABULARY.  `equal_to`, `all_of`,
+// `any_of`, `close_to`, `starts_with`, `has_item`, `describedAs` — the
+// names and the sentence shape ("expected ..., but ...") come from the
+// library this ports, so a person who has written hamcrest assertions
+// reads these without learning anything.  Where a name had to change
+// the test says why: `is_not` because `not` is an operator, and
+// `contains_text` because `contains` is the list one.
+//
+// NOTHING HERE ASSERTS A FAILURE HAPPENING.  `assert_that` fails a test
+// when its matcher does not match, which is exactly what a test cannot
+// check about itself — a suite that called it with a mismatching value
+// would fail.  So `check_that` is what the suite exercises, and
+// `assert_that` is covered by the one thing a test CAN assert about it:
+// that it does nothing when the value matches.
+
+use std.test
+use matchers
+use matchcombine
+use matchvalue
+
+@test
+fn test_an_outcome_is_a_verdict_and_a_reason() [io]
+    test.case("a match has no reason, because there is nothing to say")
+    let ok = matchers.matched()
+    test.assert(ok.ok)
+    test.assert(ok.mismatch == None)
+
+    test.case("a mismatch carries the clause that completes \"but ...\"")
+    let no = matchers.mismatched("was 4")
+    test.assert(no.ok == false)
+    test.assert(no.mismatch == Some("was 4"))
+
+@test
+fn test_a_matcher_is_a_description_and_a_judgement() [io]
+    test.case("what it expects is a noun phrase completing \"expected ...\"")
+    test.assert(matchers.describe(matchvalue.equal_to(42)) == "equal to 42")
+
+    test.case("and what it found is a clause completing \"but ...\"")
+    test.assert(matchers.describe_mismatch(matchvalue.equal_to(42), 41) == "was 41")
+
+    test.case("a value that matched has nothing to describe")
+    test.assert(matchers.describe_mismatch(matchvalue.equal_to(42), 42) == "")
+
+    test.case("the three hamcrest names are all one judgement underneath")
+    test.assert(matchers.matches(matchvalue.equal_to(42), 42))
+    test.assert(matchers.matches(matchvalue.equal_to(42), 41) == false)
+    test.assert(matchers.check_that(41, matchvalue.equal_to(42)).ok == false)
+    test.assert(matchers.check_that(42, matchvalue.equal_to(42)).mismatch == None)
+
+@test
+fn test_a_caller_can_write_a_matcher_of_its_own() [io]
+    test.case("the escape hatch takes a description and a function")
+    // The binding is annotated because a named function passed where
+    // `fn(T) -> F` is expected does not close its type parameters today.
+    let even: Matcher<Int> = matchers.matcher("an even number", judge_even)
+    test.assert(matchers.describe(even) == "an even number")
+    test.assert(matchers.matches(even, 4))
+    test.assert(matchers.matches(even, 5) == false)
+
+    test.case("and it composes with everything in the package")
+    let m: Matcher<Int> = matchcombine.both(even, matchvalue.at_least(10))
+    test.assert(matchers.matches(m, 12))
+    test.assert(matchers.matches(m, 4) == false)
+
+// A matcher a caller wrote, standing in for one over a caller's own
+// type: the shape is the same and the integer keeps the suite short.
+fn judge_even(n: Int) -> MatchOutcome
+    if n % 2 == 0
+        matchers.matched()
+    else
+        matchers.mismatched("was ${n}, which is odd")
+
+@test
+fn test_the_failure_is_a_sentence_with_both_halves_in_it() [io]
+    test.case("with no subject it starts at \"expected\"")
+    test.assert(matchers.failure_text("", "equal to 42", "was 41")
+                == "expected equal to 42, but was 41")
+
+    test.case("and with one it names the thing first")
+    test.assert(matchers.failure_text("the total", "equal to 42", "was 41")
+                == "the total: expected equal to 42, but was 41")
+
+    test.case("asserting a value that matches does nothing at all")
+    // The one thing a suite can check about `assert_that`: calling it
+    // with a matching value leaves the test green.  Calling it with a
+    // mismatching one fails THIS test, which is what it is for.
+    matchers.assert_that(42, matchvalue.equal_to(42))
+    matchers.assert_that_named("the total", 42, matchvalue.equal_to(42))
+
+@test
+fn test_a_matcher_can_be_given_a_better_name() [io]
+    test.case("described_as replaces the description and keeps the judgement")
+    let port: Matcher<Int> = matchvalue.between(1, 65535)
+    let m: Matcher<Int> = matchers.described_as("a valid port", port)
+    test.assert(matchers.describe(m) == "a valid port")
+    test.assert(matchers.matches(m, 80))
+    test.assert(matchers.matches(m, 70000) == false)
+
+    test.case("anything matches everything, and is all_of's identity")
+    let any: Matcher<Int> = matchers.anything()
+    test.assert(matchers.matches(any, 5))
+    test.assert(matchers.matches(any, 0 - 5))
+
+    test.case("and nothing_at_all matches nothing, which is any_of's")
+    let none: Matcher<Int> = matchers.nothing_at_all()
+    test.assert(matchers.matches(none, 5) == false)
+
+@test
+fn test_all_of_short_circuits_and_any_of_does_not() [io]
+    test.case("every clause has to hold")
+    let m: Matcher<Int> = matchcombine.all_of([matchvalue.at_least(1),
+                                               matchvalue.at_most(9)])
+    test.assert(matchers.matches(m, 5))
+    test.assert(matchers.matches(m, 10) == false)
+
+    test.case("and the failure names the clause, not the conjunction")
+    // The difference between "expected true" and a message a person
+    // acts on, which is the whole argument for this package.
+    test.assert(matchers.describe_mismatch(m, 10) == "was 10")
+
+    test.case("an empty all_of matches everything")
+    let empty_all: Matcher<Int> = matchcombine.all_of([])
+    test.assert(matchers.matches(empty_all, 5))
+
+    test.case("one clause is enough for any_of")
+    let a: Matcher<Int> = matchcombine.any_of([matchvalue.equal_to(2),
+                                               matchvalue.equal_to(3)])
+    test.assert(matchers.matches(a, 3))
+    test.assert(matchers.matches(a, 4) == false)
+
+    test.case("and an empty any_of matches nothing")
+    let empty_any: Matcher<Int> = matchcombine.any_of([])
+    test.assert(matchers.matches(empty_any, 5) == false)
+
+    test.case("both and either are the two-argument forms")
+    let b: Matcher<Int> = matchcombine.both(matchvalue.at_least(1),
+                                            matchvalue.at_most(9))
+    test.assert(matchers.matches(b, 5))
+    let e: Matcher<Int> = matchcombine.either(matchvalue.equal_to(2),
+                                              matchvalue.equal_to(3))
+    test.assert(matchers.matches(e, 2))
+    test.assert(matchers.matches(e, 4) == false)
+
+@test
+fn test_negation_is_called_is_not_because_not_is_an_operator() [io]
+    test.case("it inverts the judgement")
+    let m: Matcher<Int> = matchcombine.is_not(matchvalue.equal_to(4))
+    test.assert(matchers.matches(m, 5))
+    test.assert(matchers.matches(m, 4) == false)
+
+    test.case("and its mismatch is the value, because \"it matched\" says nothing")
+    test.assert(matchers.describe_mismatch(m, 4) == "was 4")
+
+    test.case("not_equal_to exists to write the better sentence")
+    test.assert(matchers.describe(matchvalue.not_equal_to(42)) == "anything but 42")
+
+@test
+fn test_a_projection_is_what_has_field_becomes_without_reflection() [io]
+    test.case("field_of takes the accessor and the label")
+    // The binding is annotated because a named function passed where
+    // `fn(T) -> F` is expected does not close its type parameters today.
+    let want: Matcher<Int> = matchvalue.equal_to(42)
+    let m: Matcher<Invoice> = matchcombine.field_of("total", invoice_total, want)
+    test.assert(matchers.describe(m) == "total equal to 42")
+    test.assert(matchers.matches(m, Invoice { total: 42 }))
+    test.assert(matchers.matches(m, Invoice { total: 41 }) == false)
+
+    test.case("and the mismatch names the field as well as the value")
+    test.assert(matchers.describe_mismatch(m, Invoice { total: 41 })
+                == "total was 41")
+
+    test.case("after is the same shape for a computation rather than a field")
+    let ten: Matcher<Int> = matchvalue.equal_to(10)
+    let d: Matcher<Int> = matchcombine.after(doubled, ten)
+    test.assert(matchers.matches(d, 5))
+    test.assert(matchers.matches(d, 6) == false)
+
+// A caller's own type, so the projection matchers are exercised over
+// something that is not a primitive.
+struct Invoice
+    total: Int
+
+fn invoice_total(i: Invoice) -> Int
+    i.total
+
+fn doubled(n: Int) -> Int
+    n * 2
+
+@test
+fn test_the_value_matchers_say_what_they_wanted() [io]
+    test.case("equality, in both directions")
+    test.assert(matchers.matches(matchvalue.equal_to("ok"), "ok"))
+    test.assert(matchers.matches(matchvalue.not_equal_to("ok"), "no"))
+
+    test.case("ordering, with the boundary in the right place")
+    test.assert(matchers.matches(matchvalue.greater_than(17), 18))
+    test.assert(matchers.matches(matchvalue.greater_than(17), 17) == false)
+    test.assert(matchers.matches(matchvalue.at_least(17), 17))
+    test.assert(matchers.matches(matchvalue.less_than(17), 17) == false)
+    test.assert(matchers.matches(matchvalue.at_most(17), 17))
+
+    test.case("between includes both ends, which is what a caller means")
+    test.assert(matchers.matches(matchvalue.between(1, 65535), 1))
+    test.assert(matchers.matches(matchvalue.between(1, 65535), 65535))
+    test.assert(matchers.matches(matchvalue.between(1, 65535), 0) == false)
+    test.assert(matchers.describe(matchvalue.between(1, 65535))
+                == "between 1 and 65535")
+
+    test.case("swapped bounds match nothing, and the description says so")
+    test.assert(matchers.matches(matchvalue.between(9, 1), 5) == false)
+
+    test.case("the booleans")
+    test.assert(matchers.matches(matchvalue.is_true(), true))
+    test.assert(matchers.matches(matchvalue.is_false(), false))
+    test.assert(matchers.matches(matchvalue.is_true(), false) == false)
+
+    test.case("and one_of writes the sentence any_of would not")
+    let m: Matcher<Int> = matchvalue.one_of([2, 3, 5, 7])
+    test.assert(matchers.matches(m, 5))
+    test.assert(matchers.matches(m, 4) == false)
+    test.assert(matchers.describe(m) == "one of [2, 3, 5, 7]")
+    let empty: Matcher<Int> = matchvalue.one_of([])
+    test.assert(matchers.matches(empty, 5) == false)
+
+@test
+fn test_close_to_is_the_matcher_a_float_test_actually_wants() [io]
+    test.case("equality over a computed Float is the trap")
+    // 0.1 + 0.2 is not 0.3 and never will be, which is why this matcher
+    // exists and why it has no default tolerance.
+    test.assert(matchers.matches(matchvalue.close_to(0.3, 0.000001), 0.1 + 0.2))
+
+    test.case("a tolerance that is too small refuses, and says by how much")
+    test.assert(matchers.matches(matchvalue.close_to(0.3, 0.0), 0.1 + 0.2) == false)
+
+    test.case("and the bound is inclusive")
+    test.assert(matchers.matches(matchvalue.close_to(1.0, 0.5), 1.5))
+    test.assert(matchers.matches(matchvalue.close_to(1.0, 0.5), 1.6) == false)

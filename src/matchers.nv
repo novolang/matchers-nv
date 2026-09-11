@@ -1,0 +1,355 @@
+// matchers.nv — the representation, and the assertion that reads.
+//
+// WHAT A MATCHER IS HERE
+//
+//     pub struct Matcher<T>
+//         judge: fn(T) -> MatchOutcome
+//         expected: Str
+//
+// A function held in a struct, beside the sentence that says what the
+// function is looking for.  Every combinator below and in the other
+// five modules is a function that returns one.
+//
+// WHY NOT A TRAIT.  hamcrest's `Matcher<T>` is an interface with three
+// methods, and two things in this language stop that:
+//
+//   1. **A trait bound cannot carry a type argument.**  SPEC § 3.6's
+//      grammar is `trait_bound ::= TYPE_IDENT [ '[' ident ']' ]`: the
+//      optional bracket is the EFFECT argument.  So
+//      `fn assert_that<T, M: Matches<T>>(…)` is a parse error, and a
+//      combinator generic over the value type cannot be written against
+//      a trait at all.
+//   2. **`dyn Trait` costs the union of every impl in the program**
+//      (SPEC § 5.6's table).  A `core` package whose budget is `[]`
+//      cannot hold a trait object, because one effectful impl of that
+//      trait ANYWHERE in the assembly puts an effect on it — and an
+//      assertion library is exactly the package a program implements
+//      that trait for in a dozen places.
+//
+// A closure in a struct field has neither problem: `Matcher<[T]>` is an
+// ordinary type, `all_of` takes a plain list of them, and the row stays
+// empty because a `fn(T) -> MatchOutcome` declares none.  It is the same
+// arrangement proptest-core-nv's `PropStrategy<T>` has, for the same two
+// reasons — which is worth more than either decision on its own,
+// because a person who has read one package can read the other.
+//
+// WHY NOT ONE ENUM PER VALUE KIND.  The obvious alternative —
+// `MatchInt`, `MatchStr`, `MatchList` — was rejected for one reason: a
+// caller cannot extend it.  A matcher over a caller's own `Invoice`
+// would have to be added to this package, and the whole point of the
+// shape is that `matchers.matcher` lets a caller write one in three
+// lines and compose it with everything here.
+//
+// THREE METHODS BECOME ONE CALL.  hamcrest has `matches`, `describe`
+// and `describeMismatch`, and the third is only ever called after the
+// first returned false.  Splitting them means judging the value twice,
+// which in a language with ownership means the caller hands it over
+// twice.  So the stored operation is ONE — `judge` answers a
+// `MatchOutcome` that carries both the verdict and, when it is no, the
+// reason — and the three names are public functions derived from it.
+//
+// WHY `expected` IS A STRING AND NOT A CLOSURE.  It is built when the
+// matcher is built: `equal_to(5)` makes `"equal to 5"` there and then,
+// rather than holding a `fn() -> Str`.  Eager, and cheap, and it means a
+// matcher can be printed without being run — which is what lets
+// `all_of`'s description be built by joining its parts.  The cost is a
+// string built for a matcher that never fails; the alternative was a
+// second closure per matcher, and for an assertion library that is the
+// worse trade.
+//
+// THE FAILURE IS A SENTENCE.  That is the whole reason this package is
+// on the grid rather than `test.assert(a == b)` being enough:
+//
+//     the reply: expected a list of length 3, but was a list of length 2
+//
+// Both halves are written by the matcher, which is the only thing that
+// knows what it was looking for, and `failure_text` is where the two are
+// joined so that every matcher's failure has one shape.
+
+// What one judgement answered.
+//
+// `mismatch` is `None` exactly when `ok` — not an empty string, because
+// "it matched" and "it did not match and the matcher had nothing to say"
+// are different facts and a reader of a failure report needs them apart.
+//
+// ```novo
+// use matchers
+//
+// fn main() [io]
+//     println("${matchers.matched().ok}")                   // true
+// ```
+pub struct MatchOutcome
+    // Whether the value matched.
+    ok: Bool
+    // What was actually found, as a clause that completes "but ...".
+    // `None` when `ok`.
+    mismatch: ?Str
+
+// A judgement that matched.
+//
+// ```novo
+// use matchers
+//
+// fn main() [io]
+//     match matchers.matched().mismatch
+//         Some(_) => println("has a reason")
+//         None    => println("no reason needed")            // this one
+// ```
+pub fn matched() -> MatchOutcome
+    todo("matchers-nv.matchers.matched")
+
+// A judgement that did not match, with what was found.
+//
+// `why` completes the sentence "but ...", so it is a clause and not a
+// sentence: `"was 4"`, `"was a list of length 2"`, `"had no element
+// equal to 7"`.  A `why` that started with a capital letter or ended in
+// a full stop would read wrongly in the one place it is ever shown.
+//
+// ```novo
+// use matchers
+//
+// fn main() [io]
+//     println("${matchers.mismatched("was 4").ok}")         // false
+// ```
+pub fn mismatched(why: Str) -> MatchOutcome
+    todo("matchers-nv.matchers.mismatched")
+
+// A rule for judging a value, and the sentence that says what it wants.
+//
+// ```novo
+// use matchers
+//
+// fn even() -> Matcher<Int>
+//     matchers.matcher("an even number", is_even)
+//
+// fn is_even(n: Int) -> MatchOutcome
+//     if n % 2 == 0
+//         matchers.matched()
+//     else
+//         matchers.mismatched("was ${n}, which is odd")
+// ```
+pub struct Matcher<T>
+    // Judge one value.  Total: a matcher never fails, it only answers
+    // that the value did not match.
+    judge: fn(T) -> MatchOutcome
+    // What this matcher is looking for, as a noun phrase that completes
+    // "expected ...".  Built when the matcher is built.
+    expected: Str
+
+// A matcher from a description and a judging function.
+//
+// **The escape hatch, and the reason this package's representation is a
+// struct rather than an enum**: a caller with a rule this package does
+// not have writes it in three lines and it composes with every
+// combinator here.  A matcher over a caller's own `Invoice` goes inside
+// `all_of` beside `has_len` and `is_ok` with nothing added to this
+// package.
+//
+// `expected` completes "expected ...", so it is a noun phrase: `"an
+// even number"`, `"a paid invoice"`, `"between 1 and 10"`.
+//
+// ```novo
+// use matchers
+//
+// fn positive() -> Matcher<Int>
+//     matchers.matcher("a positive number", judge_positive)
+//
+// fn judge_positive(n: Int) -> MatchOutcome
+//     if n > 0
+//         matchers.matched()
+//     else
+//         matchers.mismatched("was ${n}")
+// ```
+pub fn matcher<T>(expected: Str, judge: fn(T) -> MatchOutcome) -> Matcher<T>
+    todo("matchers-nv.matchers.matcher")
+
+// Judge a value: did it match, and if not, what was it?
+//
+// The one call that turns a matcher into an answer.  Everything else in
+// this package builds matchers; this is what `assert_that` does with
+// one, and it is public so that a caller can judge without asserting —
+// a validation pass collecting reasons rather than stopping at the
+// first.
+//
+// ```novo
+// use matchers
+// use matchvalue
+//
+// fn main() [io]
+//     println("${matchers.check_that(5, matchvalue.equal_to(5)).ok}")   // true
+// ```
+pub fn check_that<T>(value: T, m: Matcher<T>) -> MatchOutcome
+    todo("matchers-nv.matchers.check_that")
+
+// Whether a value matches — hamcrest's `matches`.
+//
+// ```novo
+// use matchers
+// use matchvalue
+//
+// fn main() [io]
+//     println("${matchers.matches(matchvalue.equal_to(5), 4)}")         // false
+// ```
+pub fn matches<T>(m: Matcher<T>, value: T) -> Bool
+    todo("matchers-nv.matchers.matches")
+
+// What a matcher expects — hamcrest's `describe`.
+//
+// A noun phrase completing "expected ...", which is how it reads in a
+// failure and how it reads inside `all_of`'s description.
+//
+// ```novo
+// use matchers
+// use matchvalue
+//
+// fn main() [io]
+//     println(matchers.describe(matchvalue.equal_to(5)))               // equal to 5
+// ```
+pub fn describe<T>(m: Matcher<T>) -> Str
+    todo("matchers-nv.matchers.describe")
+
+// What a matcher found — hamcrest's `describeMismatch`.
+//
+// A clause completing "but ...".  Answers `""` for a value that
+// matched, because there is nothing to describe; a caller that wants to
+// know which happened asks `check_that` and reads both.
+//
+// ```novo
+// use matchers
+// use matchvalue
+//
+// fn main() [io]
+//     println(matchers.describe_mismatch(matchvalue.equal_to(5), 4))   // was 4
+// ```
+pub fn describe_mismatch<T>(m: Matcher<T>, value: T) -> Str
+    todo("matchers-nv.matchers.describe_mismatch")
+
+// **Assert that a value matches, and fail with a sentence if it does
+// not.**
+//
+// The function this package exists for.  A failure reads
+//
+//     expected a list of length 3, but was a list of length 2
+//
+// rather than `expected true, got false`, because the matcher is the
+// only thing that knows both halves and it wrote them both.
+//
+// Effect-free, which is worth saying because it looks like it should
+// not be: `test.fail` writes one runtime global that the harness reads
+// afterwards and declares no effect, so a pure function that asserts
+// stays pure and a `@test fn` needs no row it did not already have.
+//
+// ```novo
+// use matchers
+// use matchcoll
+//
+// fn check_the_reply(reply: [Int])
+//     let want: Matcher<[Int]> = matchcoll.has_len(3)
+//     matchers.assert_that(reply, want)
+//     // : expected a list of length 3, but was a list of length 2
+//
+// fn main() [io]
+//     check_the_reply([1, 2, 3])
+//     println("three entries")
+// ```
+pub fn assert_that<T>(value: T, m: Matcher<T>)
+    todo("matchers-nv.matchers.assert_that")
+
+// Assert, and name the thing being asserted about.
+//
+// The same sentence with a subject in front of it:
+//
+//     the reply: expected a list of length 3, but was a list of length 2
+//
+// Worth the extra argument in a table-driven test where forty rows run
+// the same assertion and the message alone cannot say which row failed.
+// `test.case` is the other half of that story and the two compose: the
+// harness prints the case label and this prints the subject.
+//
+// ```novo
+// use matchers
+// use matchvalue
+//
+// fn check_total(total: Int)
+//     matchers.assert_that_named("the total", total, matchvalue.equal_to(42))
+//     // : the total: expected equal to 42, but was 41
+//
+// fn main() [io]
+//     check_total(42)
+//     println("the total is right")
+// ```
+pub fn assert_that_named<T>(what: Str, value: T, m: Matcher<T>)
+    todo("matchers-nv.matchers.assert_that_named")
+
+// The sentence a failure is reported as.
+//
+// Public because it is the one thing every matcher's failure shares,
+// and because a caller building its own reporting — a validation pass
+// collecting reasons, a form that shows six failures at once — wants
+// the same shape without going through an assertion.
+//
+// `what` may be empty, and then the sentence starts at "expected".
+//
+// ```novo
+// use matchers
+//
+// fn main() [io]
+//     println(matchers.failure_text("", "equal to 42", "was 41"))
+//     // : expected equal to 42, but was 41
+// ```
+pub fn failure_text(what: Str, expected: Str, mismatch: Str) -> Str
+    todo("matchers-nv.matchers.failure_text")
+
+// The same matcher, saying something else about itself.
+//
+// hamcrest's `describedAs`.  For the case where a composed matcher's
+// generated description is accurate and unreadable — `all_of` over five
+// things produces a sentence nobody wants — and the test knows a better
+// name for what it is checking.  The judging is untouched; only the
+// "expected ..." half changes.
+//
+// ```novo
+// use matchers
+// use matchvalue
+//
+// fn main() [io]
+//     let m = matchers.described_as("a valid port", matchvalue.between(1, 65535))
+//     println(matchers.describe(m))                          // a valid port
+// ```
+pub fn described_as<T>(expected: Str, m: Matcher<T>) -> Matcher<T>
+    todo("matchers-nv.matchers.described_as")
+
+// A matcher that accepts everything.
+//
+// The identity of `all_of`, and the placeholder in a composed matcher
+// where one field is not being checked — `field_of("id", read_id,
+// matchers.anything())` asserts that the field can be read and nothing
+// about its value, which is occasionally exactly what a test means.
+//
+// ```novo
+// use matchers
+//
+// fn main() [io]
+//     // The binding is annotated because a call whose type parameter
+//     // appears in no argument has nothing to close it from.
+//     let m: Matcher<Int> = matchers.anything()
+//     println("${matchers.matches(m, 5)}")                             // true
+// ```
+pub fn anything<T>() -> Matcher<T>
+    todo("matchers-nv.matchers.anything")
+
+// A matcher that accepts nothing.
+//
+// The identity of `any_of`, and the way a test says "this branch should
+// be unreachable" in a shape that still produces a readable failure
+// rather than a bare `test.fail`.
+//
+// ```novo
+// use matchers
+//
+// fn main() [io]
+//     let m: Matcher<Int> = matchers.nothing_at_all()
+//     println("${matchers.matches(m, 5)}")                             // false
+// ```
+pub fn nothing_at_all<T>() -> Matcher<T>
+    todo("matchers-nv.matchers.nothing_at_all")

@@ -1,0 +1,237 @@
+// matchtext.nv — the matchers over a `Str`.
+//
+// A STRING ASSERTION THAT FAILS SHOULD NOT PRINT BOTH STRINGS.  That is
+// the rule this module is written to.  `test.assert_eq_str(a, b)` on two
+// four-kilobyte documents prints eight kilobytes and a person then finds
+// the difference by eye; `starts_with`, `contains_text` and
+// `has_text_length` each fail with the part that mattered, and
+// `equal_to` over a long string names the first differing offset and
+// shows a window around it rather than the whole of both.
+//
+// THE REGEX IS `std.regex`, AND WHAT THAT COMMITS A TEST TO IS WRITTEN
+// DOWN.  The standard library's engine is prepended to every program,
+// effect-free at every tier, and linear in time by construction — so
+// `matches_regex` costs no dependency and no catastrophic backtracking.
+// Its dialect is a Perl-flavoured subset with leftmost-first
+// alternation, closest relative Go's `regexp`.
+//
+// What a PORTABLE test should stay inside is smaller than that, and it
+// has a name: I-Regexp (RFC 9485) — literals, `.`, character classes,
+// `|`, `?`, `*`, `+`, `{n,m}` and grouping, with no anchors, no
+// backreferences, no lookaround and no lazy quantifiers.  jsonpath-nv
+// scopes its `match()` to exactly that set for exactly this reason: a
+// pattern outside it means something different on a different engine.
+// This package does NOT refuse a pattern outside I-Regexp — refusing
+// `\b` in a test that will only ever run here would be a library
+// deciding something about its caller — but the README says which
+// constructs are this toolchain's rather than portable, so that a
+// person moving a suite knows what will move with it.
+//
+// A PATTERN THAT DOES NOT COMPILE MATCHES NOTHING, AND SAYS SO.  A
+// matcher has nowhere to put a `Result` — it is a value built before
+// anything is judged — so a bad pattern cannot be refused at
+// construction.  What it must not do is silently answer "no match",
+// which is indistinguishable from a working pattern that did not match.
+// So the mismatch says the pattern did not compile and names the
+// engine's own error, and `is_valid_pattern` is there for a caller that
+// wants to check one up front.
+
+use matchers
+
+// Starts with a prefix.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     println(matchers.describe(matchtext.starts_with("Bearer ")))
+//     // : a string starting with "Bearer "
+// ```
+pub fn starts_with(prefix: Str) -> Matcher<Str>
+    todo("matchers-nv.matchtext.starts_with")
+
+// Ends with a suffix.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     let hit = matchers.matches(matchtext.ends_with(".zst"), "x.zst")
+//     println("${hit}")                                     // true
+// ```
+pub fn ends_with(suffix: Str) -> Matcher<Str>
+    todo("matchers-nv.matchtext.ends_with")
+
+// Contains a substring.
+//
+// Named `contains_text` rather than `contains` because
+// `matchcoll.contains` is the one over a list, and a variant of one
+// name that means two things is how a reader ends up asserting
+// something they did not mean.
+//
+// The mismatch shows a window around where the search got furthest
+// rather than the whole subject, because the subject is often a
+// document and the point of this matcher is not to print it.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     let hit = matchers.matches(matchtext.contains_text("ok"), "not ok")
+//     println("${hit}")                                     // true
+// ```
+pub fn contains_text(part: Str) -> Matcher<Str>
+    todo("matchers-nv.matchtext.contains_text")
+
+// Equal, ignoring ASCII case.
+//
+// **ASCII case, and the name does not pretend otherwise.**  Unicode
+// case folding is a table and a set of rules — Turkish dotless i,
+// German sharp s, Greek final sigma — and a matcher that folded
+// `"STRASSE"` onto `"straße"` on some inputs and not others would be
+// worse than one that never tried.  A caller that needs the full fold
+// composes `matchcombine.after` with unicode-nv's `ucase.fold`.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     let hit = matchers.matches(matchtext.equal_ignoring_case("GET"), "get")
+//     println("${hit}")                                     // true
+// ```
+pub fn equal_ignoring_case(want: Str) -> Matcher<Str>
+    todo("matchers-nv.matchtext.equal_ignoring_case")
+
+// Equal, ignoring leading and trailing whitespace on both sides.
+//
+// The matcher for output whose trailing newline is an accident of how
+// it was captured rather than something a test means to assert.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     let hit = matchers.matches(matchtext.equal_trimmed("ok"), "ok\n")
+//     println("${hit}")                                     // true
+// ```
+pub fn equal_trimmed(want: Str) -> Matcher<Str>
+    todo("matchers-nv.matchtext.equal_trimmed")
+
+// The empty string.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     let hit = matchers.matches(matchtext.is_blank(), "")
+//     println("${hit}")                                     // true
+// ```
+pub fn is_blank() -> Matcher<Str>
+    todo("matchers-nv.matchtext.is_blank")
+
+// A string of exactly `n` bytes.
+//
+// BYTES, not characters, and the name of the failure says so.  A `Str`
+// here is UTF-8 and `str.len` counts its bytes; a test that means
+// characters means grapheme clusters, which is unicode-nv's question
+// and not this package's.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     println(matchers.describe(matchtext.has_text_length(3)))
+//     // : a string of 3 byte(s)
+// ```
+pub fn has_text_length(n: Int) -> Matcher<Str>
+    todo("matchers-nv.matchtext.has_text_length")
+
+// The whole string matches a pattern.
+//
+// `std.regex.match_full`: the pattern has to match the entire subject,
+// which is RFC 9535's `match()` and is what a person writing
+// `matches_regex("[0-9]{4}")` almost always means.  `contains_regex` is
+// the substring form.
+//
+// A pattern that does not compile matches nothing and the mismatch
+// says which — never a silent "no match", which a reader cannot tell
+// from a working pattern.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     let hit = matchers.matches(matchtext.matches_regex("[0-9]{4}"), "2026")
+//     println("${hit}")                                     // true
+// ```
+pub fn matches_regex(pattern: Str) -> Matcher<Str>
+    todo("matchers-nv.matchtext.matches_regex")
+
+// Some part of the string matches a pattern.
+//
+// `std.regex.is_match`: RFC 9535's `search()`.  Separate from
+// `matches_regex` rather than a flag on it, because which of the two a
+// test means is the single most common mistake with a regex assertion
+// and a boolean argument at a call site does not say which is which.
+//
+// ```novo
+// use matchers
+// use matchtext
+//
+// fn main() [io]
+//     let hit = matchers.matches(matchtext.contains_regex("[0-9]+"), "in 2026")
+//     println("${hit}")                                     // true
+// ```
+pub fn contains_regex(pattern: Str) -> Matcher<Str>
+    todo("matchers-nv.matchtext.contains_regex")
+
+// Whether a pattern compiles, without building a matcher.
+//
+// For a caller that takes a pattern from a configuration file or a
+// command line and wants to refuse it where the refusal can carry a
+// line number, rather than discovering it inside a failing assertion.
+//
+// ```novo
+// use matchtext
+//
+// fn main() [io]
+//     let ok = matchtext.is_valid_pattern("[0-9")
+//     println("${ok}")                                      // false
+// ```
+pub fn is_valid_pattern(pattern: Str) -> Bool
+    todo("matchers-nv.matchtext.is_valid_pattern")
+
+// The construct in a pattern that is this toolchain's rather than
+// portable, if any.
+//
+// `None` for a pattern inside I-Regexp (RFC 9485), which is the set
+// that means the same thing on every engine.  Otherwise a `?Str`
+// naming what took it outside — `"anchor"`, `"backreference"`,
+// `"lazy quantifier"`, `"word boundary"`, `"POSIX class"` — so that a
+// suite being moved to another implementation can be told which of its
+// patterns will not move with it.
+//
+// This is a REPORT and not a refusal.  A test that only ever runs here
+// may use every construct `std.regex` has, and a library that refused
+// `\b` would be deciding something about its caller that its caller is
+// better placed to decide.  jsonpath-nv refuses, because a JSONPath
+// query crosses a wire and has to mean the same thing on the other
+// side; a test does not.
+//
+// ```novo
+// use matchtext
+//
+// fn main() [io]
+//     println(matchtext.unportable_construct("^abc") ?? "portable")
+//     // : anchor
+// ```
+pub fn unportable_construct(pattern: Str) -> ?Str
+    todo("matchers-nv.matchtext.unportable_construct")
