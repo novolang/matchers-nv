@@ -1,6 +1,6 @@
 [package]
 name        = "matchers-nv"
-version     = "0.0.1"
+version     = "0.0.2"
 description = "Hamcrest's shape for novo-lang: a Matcher over a value that says what it expected and what it found, the combinators that build one out of others, and an assert_that whose failure reads as a sentence rather than as `expected true, got false`.  A matcher is a struct with a function-typed field, because SPEC § 3.6's trait bounds carry an effect argument and never a type one — the README argues the representation.  Interface only — every body is a todo()."
 license     = "Apache-2.0"
 
