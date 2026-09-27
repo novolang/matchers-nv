@@ -193,6 +193,7 @@ fn test_the_value_matchers_say_what_they_wanted() [io]
     test.case("equality, in both directions")
     test.assert(matchers.matches(matchvalue.equal_to("ok"), "ok"))
     test.assert(matchers.matches(matchvalue.not_equal_to("ok"), "no"))
+    test.assert(matchers.describe_mismatch(matchvalue.not_equal_to("ok"), "ok") == "was \"ok\"")
 
     test.case("ordering, with the boundary in the right place")
     test.assert(matchers.matches(matchvalue.greater_than(17), 18))

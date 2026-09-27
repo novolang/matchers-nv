@@ -219,6 +219,7 @@ pub fn describe_mismatch<T>(m: Matcher<T>, value: T) -> Str
 pub fn assert_that<T>(value: T, m: Matcher<T>)
     let outcome = check_that(value, m)
     if not outcome.ok
+        // cov: skip — runs only when the assertion fails, which fails the calling test
         test.fail(failure_text("", m.expected, outcome.mismatch ?? ""))
 
 // Assert, and name the thing being asserted about.
@@ -247,6 +248,7 @@ pub fn assert_that<T>(value: T, m: Matcher<T>)
 pub fn assert_that_named<T>(what: Str, value: T, m: Matcher<T>)
     let outcome = check_that(value, m)
     if not outcome.ok
+        // cov: skip — runs only when the assertion fails, which fails the calling test
         test.fail(failure_text(what, m.expected, outcome.mismatch ?? ""))
 
 // The sentence a failure is reported as.
