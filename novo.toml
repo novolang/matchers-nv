@@ -1,30 +1,22 @@
 [package]
 name        = "matchers-nv"
-version     = "0.0.2"
-description = "Hamcrest's shape for novo-lang: a Matcher over a value that says what it expected and what it found, the combinators that build one out of others, and an assert_that whose failure reads as a sentence rather than as `expected true, got false`.  A matcher is a struct with a function-typed field, because SPEC § 3.6's trait bounds carry an effect argument and never a type one — the README argues the representation.  Interface only — every body is a todo()."
+version     = "0.1.0"
+description = "Hamcrest's shape for novo-lang: a Matcher over a value that says what it expected and what it found, the combinators that build one out of others, and an assert_that whose failure reads as a sentence rather than as `expected true, got false`."
 license     = "Apache-2.0"
 
-# An INTERFACE release: every `pub fn` body is a `todo()`, so the
-# signatures and the effect rows are published and nothing is
-# implemented.  `novo pkg publish` recognises the shape and requires
-# both the draft stability and the 0.0.x version; the first
-# implementation is the 0.1.0 published over it.
-stability   = "draft"
+# `experimental` because no program outside this repository has used the
+# package yet.
+stability   = "experimental"
 
 # `core`.  A matcher judges a value the caller already holds and builds
-# a string; nothing is read and nothing is written.
+# a string.  Nothing is read and nothing is written.
 #
-# `assert_that` FAILS A TEST, which looks like an effect and is not:
-# `test.fail` and `test.assert_false` are effect-free in the standard
-# library's own signatures — they write one runtime global that the
-# test harness reads afterwards — so a pure function that asserts stays
-# pure.  That is the same reason `test.case` can be called from a `@test
-# fn` with no effect row.
+# `assert_that` fails a test and declares no effect.  `test.fail` and
+# `test.assert_false` declare none in the standard library's own
+# signatures, so a function that asserts declares none either.
 #
-# No device claim.  The failure message is the whole point of this
-# package and a message is a `Str`, which the embedded runtime does not
-# link; a device that wanted assertions would want a different shape,
-# not this one with the strings taken out.
+# There is no device build.  A failure message is a `Str`, and the
+# embedded runtime does not link strings.
 layer       = "core"
 
 category    = "testing"
@@ -32,7 +24,7 @@ category    = "testing"
 tags        = ["matchers", "hamcrest", "assert", "assertions", "testing", "combinators"]
 repository  = "https://github.com/novolang/matchers-nv"
 maintainers = ["novo-lang"]
-novo        = ">= 0.8.9"
+novo        = ">= 0.14.0"
 
 # A library: no `main`, so `novo pkg build` type-checks and
 # effect-checks every module under `src/` and writes no binary.
@@ -41,20 +33,7 @@ novo        = ">= 0.8.9"
 "README.md" = "Writing an assertion whose failure explains itself"
 
 [dependencies]
-# None, and the three absences are each argued in the README.
-#
-# NOT a test-runner dependency.  `std.test` is the standard library's
-# and is prepended to every program, so `assert_that` reaches
-# `test.fail` with no dependency at all.  proptest-nv is a CONSUMER of
-# this package rather than a dependency of it: a property's body
-# asserts, and these are the assertions it makes.
-#
-# NOT a regex package.  `matchtext.matches_regex` runs `std.regex`,
-# which is prepended to every program, effect-free and available at
-# every tier.  Where its dialect goes beyond the portable subset a test
-# should stay inside is named in the README instead of being wrapped.
-#
-# NOT a formatting package.  A matcher renders the value it judged
-# through `Debug`, which SPEC § 3.8.1 gives to every struct and enum
-# whose fields have it — so a matcher over a caller's own type prints
-# that type without the caller writing anything.
+# None.  `std.test` is the test harness and `std.regex` the regular
+# expression engine, and both are part of every program.  A matcher
+# prints the value it judged through `Debug`, which SPEC section 3.8.1
+# gives to every struct and enum whose fields have it.

@@ -10,12 +10,6 @@ novo-lang.
 [httpmock-nv](https://novo-lang.org/packages/httpmock-nv) is built on it:
 a header or body expectation there is a `Matcher<Str>` from here.
 
-**Status: NOT IMPLEMENTED — interface only.** Every function is declared
-with its full signature, but every body is a `todo()` that panics when
-called. The package is published so its design can be reviewed and
-depended on before it is implemented. Version 0.1.0 will be the first
-working release.
-
 ## What it is
 
 A **matcher** over a type `T` is a `Matcher<T>`: a function that judges
@@ -82,10 +76,7 @@ fn test_the_ports_are_usable()
     // but element 2 was 70000
 ```
 
-Build and test with `novo pkg build` and `novo test`. Today `novo test`
-fails on purpose: every test reaches a
-`not implemented: matchers-nv.<module>.<fn>` panic. The tests are the
-specification the implementation will have to satisfy.
+Build and test with `novo pkg build` and `novo test`.
 
 ## What the package contains
 
@@ -155,7 +146,9 @@ package.
    grouping, with no anchors, no backreferences, no lookaround and no
    lazy quantifiers. `matchtext.unportable_construct` answers nothing for
    a pattern inside that set, and names what took it outside otherwise:
-   `"anchor"`, `"lazy quantifier"`, `"word boundary"`, `"POSIX class"`.
+   `"anchor"`, `"backreference"`, `"shorthand class"`, `"lookaround"`,
+   `"group option"`, `"lazy quantifier"`, `"word boundary"` or
+   `"POSIX class"`.
    A suite that will only ever run on this toolchain may use everything
    the standard library's engine has.
 8. **Two names differ from Hamcrest's, and the language is the reason.**
@@ -169,15 +162,12 @@ package.
    name is a build error here and a run-time failure in Hamcrest.
    `matchcombine.after` is the same shape with no label, for a projection
    that is a computation rather than a field.
-10. **Two shapes need an annotated binding today.** A named function
-    passed where a function type is expected does not close the type
-    parameter, so `matchers.matcher("an even number", judge_even)` needs
-    `let m: Matcher<Int> = …`. A type parameter that appears only inside
-    a nested generic, as in `matchcoll.has_len` and
-    `matchresult.is_ok`, closes from a concrete position and not from
-    another generic call's argument; error `E2016`'s hint lists the
-    positions it closes from. Every example in this package is written
-    the way it has to be written today.
+10. **A matcher whose type appears only in its answer needs a typed
+    position.** `matchcoll.has_len(3)` and `matchresult.is_ok()` take no
+    argument of the judged type, so the type closes from an annotated
+    binding, `let m: Matcher<[Int]> = matchcoll.has_len(3)`, or another
+    concrete position, and not from another generic call's argument.
+    Error `E2016`'s hint lists the positions.
 11. **A matcher prints the value it judged through `Debug`.**
     SPEC section 3.8.1 gives `Debug` to every struct and enum whose
     fields have it, so a matcher over your own type prints that type
@@ -244,7 +234,7 @@ package.
 
 ```bash
 novo test --isolate tests/matchers_tests.nv      # 10 tests: the representation and the sentence
-novo test --isolate tests/matchsubject_tests.nv  #  9 tests: the matchers over each kind of value
+novo test --isolate tests/matchsubject_tests.nv  # 10 tests: the matchers over each kind of value
 ```
 
 The oracle is Hamcrest's own vocabulary: `equal_to`, `all_of`, `any_of`,
@@ -262,33 +252,6 @@ is reported and not refused, that the list matchers name the element that
 failed, that membership, order and equality stay three questions, that a
 `Result` matcher tells a failure from a wrong value, and that the
 optional matchers print what was there instead.
-
-The tests compile today and fail at run, each on the
-`not implemented: matchers-nv.<module>.<fn>` panic that is its body. That
-is the expected state of an interface release. They turn green one at a
-time as bodies land.
-
-## Implementation status
-
-| Item | Implemented |
-| --- | --- |
-| `matchers.matched`, `.mismatched`, `.matcher` | no |
-| `matchers.check_that`, `.matches`, `.describe`, `.describe_mismatch` | no |
-| `matchers.assert_that`, `.assert_that_named`, `.failure_text` | no |
-| `matchers.described_as`, `.anything`, `.nothing_at_all` | no |
-| `matchcombine.all_of`, `.any_of`, `.is_not`, `.both`, `.either` | no |
-| `matchcombine.field_of`, `.after` | no |
-| `matchvalue.equal_to`, `.not_equal_to`, `.close_to`, `.one_of` | no |
-| `matchvalue.greater_than`, `.at_least`, `.less_than`, `.at_most`, `.between` | no |
-| `matchvalue.is_true`, `.is_false` | no |
-| `matchtext.starts_with`, `.ends_with`, `.contains_text` | no |
-| `matchtext.equal_ignoring_case`, `.equal_trimmed`, `.is_blank`, `.has_text_length` | no |
-| `matchtext.matches_regex`, `.contains_regex`, `.is_valid_pattern`, `.unportable_construct` | no |
-| `matchcoll.has_len`, `.is_empty`, `.is_not_empty`, `.has_length_that` | no |
-| `matchcoll.contains`, `.contains_all`, `.contains_none`, `.equal_list`, `.in_order` | no |
-| `matchcoll.every_item`, `.any_item`, `.item_at` | no |
-| `matchresult.is_ok`, `.is_ok_with`, `.is_err`, `.is_err_with`, `.unwrapped` | no |
-| `matchresult.is_some`, `.is_some_with`, `.is_none` | no |
 
 ## Licence
 

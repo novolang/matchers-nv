@@ -4,6 +4,47 @@ Every published version, newest first.  This file is on the publish
 allow-list, so it travels with the package: it is the only thing a
 consumer deciding whether to upgrade can read.
 
+## 0.1.0 — 2026-09-28
+
+The first implementation of the interface published as 0.0.1.
+
+### Added
+
+- `matchers`: the outcome, the three Hamcrest readers derived from one
+  judgement, the two assertions and the sentence they fail with,
+  `described_as`, `anything` and `nothing_at_all`.
+- `matchcombine`: `all_of`, which stops at the first clause that fails;
+  `any_of`, which judges every clause and reports each distinct
+  mismatch; `is_not`, `both`, `either`, `field_of` and `after`.
+- `matchvalue`: equality, the four orderings, `between`, `close_to`
+  with an inclusive tolerance, the two booleans and `one_of`.
+- `matchtext`: prefix, suffix, substring, ASCII case-insensitive and
+  trimmed equality, blankness, byte length, the two regular-expression
+  matchers, `is_valid_pattern` and `unportable_construct`.  A subject
+  longer than 64 bytes is shown as its first 64 bytes and its length.
+- `matchcoll`: length, emptiness, membership, exclusion, exact
+  equality, relative order, `every_item`, `any_item`, `item_at` and
+  `has_length_that`.  A failure names the element or the index.
+- `matchresult`: `is_ok`, `is_ok_with`, `is_err`, `is_err_with`,
+  `is_some`, `is_some_with`, `is_none` and `unwrapped`.
+
+### Behaviour the interface left open
+
+- `between` with its bounds swapped matches nothing, and its
+  description says the bounds are swapped.
+- `unportable_construct` also names a backreference, a shorthand class,
+  a lookaround and a group option.
+
+### Toolchain
+
+- The toolchain floor is 0.14.0.  The bodies target novo 0.14.0 and
+  carry no workaround for a compiler defect.
+
+### Tests
+
+- 20 tests in two suites.  `tests/coverage.sh` merges the suites'
+  line coverage over `src/`.
+
 ## 0.0.2 — 2026-09-16
 
 README rewritten to the package README style guide
