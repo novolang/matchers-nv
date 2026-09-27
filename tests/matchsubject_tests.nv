@@ -1,24 +1,16 @@
-// matchsubject_tests.nv — the API suite for the matchers over a string,
-// a list, a `Result` and an optional.
+// matchsubject_tests.nv — the API suite for the matchers over a
+// string, a list, a `Result` and an optional.
 //
-// RED ON PURPOSE: every body under `src/` is a `todo()`, so every
-// assertion here reaches `not implemented: matchers-nv.<module>.<fn>`.
+// Some matchers look interchangeable and are not: `contains_all`,
+// `in_order` and `equal_list`; `matches_regex` and `contains_regex`;
+// `is_err` and `is_err_with`.  Each group is asserted against one input
+// with the case that separates its members.
 //
-// THE CASES ARE THE DISTINCTIONS, not the coverage.  Three matchers in
-// this package look interchangeable and are not — `contains_all`,
-// `in_order` and `equal_list` — and a test suite that exercised each
-// once without asserting where they differ would not protect the
-// difference.  So each of the three is asserted against the same list
-// with the case that separates it from its neighbours, and the same is
-// done for `matches_regex` against `contains_regex` and for `is_err`
-// against `is_err_with`.
-//
-// THE REGEX CASES SAY WHAT DIALECT THEY ARE IN.  `std.regex` is a
-// Perl-flavoured subset and I-Regexp (RFC 9485) is the portable core
-// inside it; `unportable_construct` is what tells the two apart, and it
-// is a report rather than a refusal.  The assertions below check both
-// halves: that a portable pattern reports nothing, and that each
-// construct outside the core is named.
+// The regular-expression cases state their dialect.  `std.regex` is a
+// Perl-flavoured subset, and I-Regexp (RFC 9485) is the portable core
+// inside it.  The suite checks that a portable pattern reports nothing
+// from `unportable_construct`, and that each construct outside the core
+// is named.
 
 use std.test
 use matchers
@@ -82,6 +74,17 @@ fn test_a_whole_match_and_a_search_are_different_assertions() [io]
                 != "")
 
 @test
+fn test_a_long_subject_is_shown_as_its_start_and_its_length() [io]
+    test.case("a short subject is shown in full")
+    test.assert(matchtext.shown("abc") == "\"abc\"")
+
+    test.case("a long one is cut at 64 bytes")
+    let long = str.repeat("a", 100)
+    test.assert(matchtext.shown(long) == "\"" + str.repeat("a", 64) + "\"... (100 bytes)")
+    test.assert(matchers.describe_mismatch(matchtext.starts_with("b"), long)
+                == "was \"" + str.repeat("a", 64) + "\"... (100 bytes)")
+
+@test
 fn test_the_portable_subset_is_reported_and_not_refused() [io]
     test.case("a pattern inside I-Regexp reports nothing")
     test.assert(matchtext.unportable_construct("[0-9]{4}-[0-9]{2}") == None)
@@ -94,6 +97,15 @@ fn test_the_portable_subset_is_reported_and_not_refused() [io]
     test.assert(matchtext.unportable_construct("a*?") == Some("lazy quantifier"))
     test.assert(matchtext.unportable_construct("\\babc") == Some("word boundary"))
     test.assert(matchtext.unportable_construct("[[:alpha:]]") == Some("POSIX class"))
+    test.assert(matchtext.unportable_construct("(a)\\1") == Some("backreference"))
+    test.assert(matchtext.unportable_construct("\\d+") == Some("shorthand class"))
+    test.assert(matchtext.unportable_construct("\\Aabc") == Some("anchor"))
+    test.assert(matchtext.unportable_construct("(?=a)b") == Some("lookaround"))
+    test.assert(matchtext.unportable_construct("(?i)abc") == Some("group option"))
+
+    test.case("an escaped character, and a class that closes, are portable")
+    test.assert(matchtext.unportable_construct("a\\.b\\^") == None)
+    test.assert(matchtext.unportable_construct("[ab]c") == None)
 
     test.case("but it is still a matcher, because a test need not be portable")
     // jsonpath-nv refuses, because a query crosses a wire and has to

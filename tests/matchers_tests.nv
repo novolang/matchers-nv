@@ -1,31 +1,19 @@
 // matchers_tests.nv — the API suite for the representation, the
 // combinators, and the sentence a failure reads as.
 //
-// RED ON PURPOSE: every body under `src/` is a `todo()`, so every
-// assertion here reaches `not implemented: matchers-nv.<module>.<fn>`.
+// Most assertions here are about text: what `describe` says, what
+// `describe_mismatch` says, and what `failure_text` makes of the two.
+// A matcher that judged correctly and described itself badly would pass
+// a suite that only checked `matches`.
 //
-// WHAT IS BEING ASSERTED IS THE SENTENCE.  A matcher library's whole
-// claim is that its failures read, so the tests below are mostly
-// assertions about strings: what `describe` says, what
-// `describe_mismatch` says, and what the two become when `failure_text`
-// joins them.  A matcher that judged correctly and described itself
-// badly would pass a suite that only checked `matches`, and it would be
-// a package nobody wanted.
+// The oracle is Hamcrest's vocabulary: `equal_to`, `all_of`, `any_of`,
+// `close_to`, `starts_with`, `has_item`, `describedAs`, and the sentence
+// "expected ..., but ...".  Two names differ: `is_not`, because `not` is
+// an operator, and `contains_text`, because `contains` is the list one.
 //
-// THE ORACLE IS HAMCREST'S OWN VOCABULARY.  `equal_to`, `all_of`,
-// `any_of`, `close_to`, `starts_with`, `has_item`, `describedAs` — the
-// names and the sentence shape ("expected ..., but ...") come from the
-// library this ports, so a person who has written hamcrest assertions
-// reads these without learning anything.  Where a name had to change
-// the test says why: `is_not` because `not` is an operator, and
-// `contains_text` because `contains` is the list one.
-//
-// NOTHING HERE ASSERTS A FAILURE HAPPENING.  `assert_that` fails a test
-// when its matcher does not match, which is exactly what a test cannot
-// check about itself — a suite that called it with a mismatching value
-// would fail.  So `check_that` is what the suite exercises, and
-// `assert_that` is covered by the one thing a test CAN assert about it:
-// that it does nothing when the value matches.
+// No case here makes an assertion fail, because a failing assertion
+// fails the suite.  `check_that` is what the suite judges with, and
+// `assert_that` is asserted to do nothing when the value matches.
 
 use std.test
 use matchers
@@ -227,12 +215,14 @@ fn test_the_value_matchers_say_what_they_wanted() [io]
     test.assert(matchers.matches(matchvalue.is_true(), true))
     test.assert(matchers.matches(matchvalue.is_false(), false))
     test.assert(matchers.matches(matchvalue.is_true(), false) == false)
+    test.assert(matchers.describe_mismatch(matchvalue.is_false(), true) == "was true")
 
     test.case("and one_of writes the sentence any_of would not")
     let m: Matcher<Int> = matchvalue.one_of([2, 3, 5, 7])
     test.assert(matchers.matches(m, 5))
     test.assert(matchers.matches(m, 4) == false)
     test.assert(matchers.describe(m) == "one of [2, 3, 5, 7]")
+    test.assert(matchvalue.debug_list([2, 3, 5, 7]) == "[2, 3, 5, 7]")
     let empty: Matcher<Int> = matchvalue.one_of([])
     test.assert(matchers.matches(empty, 5) == false)
 
@@ -249,3 +239,7 @@ fn test_close_to_is_the_matcher_a_float_test_actually_wants() [io]
     test.case("and the bound is inclusive")
     test.assert(matchers.matches(matchvalue.close_to(1.0, 0.5), 1.5))
     test.assert(matchers.matches(matchvalue.close_to(1.0, 0.5), 1.6) == false)
+
+    test.case("on either side of the value")
+    test.assert(matchers.matches(matchvalue.close_to(1.0, 0.5), 0.5))
+    test.assert(matchers.matches(matchvalue.close_to(1.0, 0.5), 0.4) == false)
