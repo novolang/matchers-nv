@@ -28,6 +28,7 @@
 // works without the caller writing a formatter.
 
 use matchers
+use matchvalue
 
 // A list of exactly `n` elements.
 //
@@ -45,7 +46,7 @@ use matchers
 //     // : was a list of length 2
 // ```
 pub fn has_len<T>(n: Int) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.has_len")
+    Matcher { judge: xs => judge_len(n, xs), expected: "a list of length " + str.from_int(n) }
 
 // A list with no elements.
 //
@@ -61,7 +62,7 @@ pub fn has_len<T>(n: Int) -> Matcher<[T]>
 //     println("${matchers.matches(m, [])}")                 // true
 // ```
 pub fn is_empty<T>() -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.is_empty")
+    Matcher { judge: xs => judge_len(0, xs), expected: "an empty list" }
 
 // A list with at least one element.
 //
@@ -74,7 +75,7 @@ pub fn is_empty<T>() -> Matcher<[T]>
 //     println("${matchers.matches(m, [])}")                 // false
 // ```
 pub fn is_not_empty<T>() -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.is_not_empty")
+    Matcher { judge: judge_not_empty, expected: "a non-empty list" }
 
 // A list containing this element, anywhere.
 //
@@ -92,7 +93,7 @@ pub fn is_not_empty<T>() -> Matcher<[T]>
 //     // : a list containing 7
 // ```
 pub fn contains<T: Eq + Debug>(want: T) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.contains")
+    Matcher { judge: xs => judge_contains(want, xs), expected: "a list containing " + want.debug() }
 
 // A list containing every one of these, anywhere, in any order.
 //
@@ -113,7 +114,8 @@ pub fn contains<T: Eq + Debug>(want: T) -> Matcher<[T]>
 //     // : did not contain 9
 // ```
 pub fn contains_all<T: Eq + Debug>(wanted: [T]) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.contains_all")
+    Matcher { judge: xs => judge_contains_all(wanted, xs),
+        expected: "a list containing all of " + matchvalue.debug_list(wanted) }
 
 // A list containing none of these.
 //
@@ -126,7 +128,8 @@ pub fn contains_all<T: Eq + Debug>(wanted: [T]) -> Matcher<[T]>
 //     println("${matchers.matches(m, [1, 2])}")             // true
 // ```
 pub fn contains_none<T: Eq + Debug>(unwanted: [T]) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.contains_none")
+    Matcher { judge: xs => judge_contains_none(unwanted, xs),
+        expected: "a list containing none of " + matchvalue.debug_list(unwanted) }
 
 // A list whose elements are exactly these, in this order.
 //
@@ -145,7 +148,8 @@ pub fn contains_none<T: Eq + Debug>(unwanted: [T]) -> Matcher<[T]>
 //     // : element 1 was 3
 // ```
 pub fn equal_list<T: Eq + Debug>(want: [T]) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.equal_list")
+    Matcher { judge: xs => judge_equal_list(want, xs),
+        expected: "the list " + matchvalue.debug_list(want) }
 
 // A list in which these appear in this order, with anything between.
 //
@@ -162,7 +166,8 @@ pub fn equal_list<T: Eq + Debug>(want: [T]) -> Matcher<[T]>
 //     println("${matchers.matches(m, [1, 2, 3])}")          // true
 // ```
 pub fn in_order<T: Eq + Debug>(want: [T]) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.in_order")
+    Matcher { judge: xs => judge_in_order(want, xs),
+        expected: "a list with " + matchvalue.debug_list(want) + " in that order" }
 
 // Every element matches.
 //
@@ -186,7 +191,7 @@ pub fn in_order<T: Eq + Debug>(want: [T]) -> Matcher<[T]>
 //     // : element 1 was -1
 // ```
 pub fn every_item<T>(m: Matcher<T>) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.every_item")
+    Matcher { judge: xs => judge_every(m, xs), expected: "every item " + matchers.describe(m) }
 
 // At least one element matches.
 //
@@ -205,7 +210,7 @@ pub fn every_item<T>(m: Matcher<T>) -> Matcher<[T]>
 //     println("${matchers.matches(m, [1, 2, 3])}")          // true
 // ```
 pub fn any_item<T>(m: Matcher<T>) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.any_item")
+    Matcher { judge: xs => judge_any_item(m, xs), expected: "an item " + matchers.describe(m) }
 
 // The element at an index matches.
 //
@@ -225,7 +230,8 @@ pub fn any_item<T>(m: Matcher<T>) -> Matcher<[T]>
 //     // : was a list of length 2, with no element 5
 // ```
 pub fn item_at<T>(index: Int, m: Matcher<T>) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.item_at")
+    Matcher { judge: xs => judge_item_at(index, m, xs),
+        expected: "item " + str.from_int(index) + " " + matchers.describe(m) }
 
 // A list whose length matches.
 //
@@ -244,4 +250,106 @@ pub fn item_at<T>(index: Int, m: Matcher<T>) -> Matcher<[T]>
 //     println("${matchers.matches(m, [1, 2])}")             // true
 // ```
 pub fn has_length_that<T>(m: Matcher<Int>) -> Matcher<[T]>
-    todo("matchers-nv.matchcoll.has_length_that")
+    Matcher { judge: xs => judge_length_that(m, xs),
+        expected: "a list of length " + matchers.describe(m) }
+
+// "was a list of length 2".
+fn list_of_length<T>(xs: [T]) -> MatchOutcome
+    matchers.mismatched("was a list of length " + str.from_int(list.len(xs)))
+
+// The judgement of `has_len` and `is_empty`.
+fn judge_len<T>(n: Int, xs: [T]) -> MatchOutcome
+    if list.len(xs) == n
+        return matchers.matched()
+    list_of_length(xs)
+
+// The judgement of `is_not_empty`.
+fn judge_not_empty<T>(xs: [T]) -> MatchOutcome
+    if list.len(xs) > 0
+        return matchers.matched()
+    matchers.mismatched("was an empty list")
+
+// The judgement of `contains`.
+fn judge_contains<T: Eq + Debug>(want: T, xs: [T]) -> MatchOutcome
+    if list.contains(xs, want)
+        return matchers.matched()
+    matchers.mismatched("had no element equal to " + want.debug())
+
+// The judgement of `contains_all`: every missing value, named.
+fn judge_contains_all<T: Eq + Debug>(wanted: [T], xs: [T]) -> MatchOutcome
+    var missing: [Str] = []
+    for w in wanted
+        let text = w.debug()
+        if not list.contains(xs, w) and not list.contains(missing, text)
+            missing = list.push(missing, text)
+    if list.len(missing) == 0
+        return matchers.matched()
+    matchers.mismatched("did not contain " + str.join(missing, ", "))
+
+// The judgement of `contains_none`: every unwanted value found, named.
+fn judge_contains_none<T: Eq + Debug>(unwanted: [T], xs: [T]) -> MatchOutcome
+    var found: [Str] = []
+    for u in unwanted
+        let text = u.debug()
+        if list.contains(xs, u) and not list.contains(found, text)
+            found = list.push(found, text)
+    if list.len(found) == 0
+        return matchers.matched()
+    matchers.mismatched("contained " + str.join(found, ", "))
+
+// The judgement of `equal_list`: the first index that differs, or the
+// length when one list is a prefix of the other.
+fn judge_equal_list<T: Eq + Debug>(want: [T], xs: [T]) -> MatchOutcome
+    let n = list.len(want)
+    for i in 0..list.len(xs)
+        if i < n and xs[i] != want[i]
+            return matchers.mismatched("element " + str.from_int(i) + " was " + xs[i].debug())
+    if list.len(xs) != n
+        return list_of_length(xs)
+    matchers.matched()
+
+// The judgement of `in_order`: each wanted value found after the one
+// before it.
+fn judge_in_order<T: Eq + Debug>(want: [T], xs: [T]) -> MatchOutcome
+    var next = 0
+    for x in xs
+        if next < list.len(want) and x == want[next]
+            next = next + 1
+    if next == list.len(want)
+        return matchers.matched()
+    if next == 0
+        return matchers.mismatched("did not contain " + want[0].debug())
+    matchers.mismatched("did not contain " + want[next].debug() + " after " + want[next - 1].debug())
+
+// The judgement of `every_item`: the first element that does not match.
+fn judge_every<T>(m: Matcher<T>, xs: [T]) -> MatchOutcome
+    for i in 0..list.len(xs)
+        let o = matchers.check_that(xs[i], m)
+        if not o.ok
+            return matchers.mismatched("element " + str.from_int(i) + " " + (o.mismatch ?? ""))
+    matchers.matched()
+
+// The judgement of `any_item`.
+fn judge_any_item<T>(m: Matcher<T>, xs: [T]) -> MatchOutcome
+    for x in xs
+        if matchers.matches(m, x)
+            return matchers.matched()
+    if list.len(xs) == 0
+        return matchers.mismatched("was an empty list")
+    matchers.mismatched("had " + str.from_int(list.len(xs)) + " elements and none matched")
+
+// The judgement of `item_at`.
+fn judge_item_at<T>(index: Int, m: Matcher<T>, xs: [T]) -> MatchOutcome
+    if index < 0 or index >= list.len(xs)
+        return matchers.mismatched("was a list of length " + str.from_int(list.len(xs)) + ", with no element " + str.from_int(index))
+    let o = matchers.check_that(xs[index], m)
+    if o.ok
+        return o
+    matchers.mismatched("element " + str.from_int(index) + " " + (o.mismatch ?? ""))
+
+// The judgement of `has_length_that`.
+fn judge_length_that<T>(m: Matcher<Int>, xs: [T]) -> MatchOutcome
+    let o = matchers.check_that(list.len(xs), m)
+    if o.ok
+        return o
+    matchers.mismatched("length " + (o.mismatch ?? ""))

@@ -49,7 +49,7 @@ use matchers
 //     // : was 10
 // ```
 pub fn all_of<T>(ms: [Matcher<T>]) -> Matcher<T>
-    todo("matchers-nv.matchcombine.all_of")
+    Matcher { judge: x => judge_all(ms, x), expected: joined(ms, " and ", "anything") }
 
 // At least one of them.
 //
@@ -67,7 +67,7 @@ pub fn all_of<T>(ms: [Matcher<T>]) -> Matcher<T>
 //     println("${matchers.matches(m, 3)}")                  // true
 // ```
 pub fn any_of<T>(ms: [Matcher<T>]) -> Matcher<T>
-    todo("matchers-nv.matchcombine.any_of")
+    Matcher { judge: x => judge_any(ms, x), expected: "one of: " + joined(ms, ", ", "nothing") }
 
 // Not this one.
 //
@@ -93,8 +93,8 @@ pub fn any_of<T>(ms: [Matcher<T>]) -> Matcher<T>
 //     println("${matchers.matches(matchcombine.is_not(matchvalue.equal_to(4)), 5)}")
 //     // true
 // ```
-pub fn is_not<T>(m: Matcher<T>) -> Matcher<T>
-    todo("matchers-nv.matchcombine.is_not")
+pub fn is_not<T: Debug>(m: Matcher<T>) -> Matcher<T>
+    Matcher { judge: x => judge_not(m, x), expected: "not " + matchers.describe(m) }
 
 // Both of them.
 //
@@ -111,7 +111,7 @@ pub fn is_not<T>(m: Matcher<T>) -> Matcher<T>
 //     println("${matchers.matches(m, 5)}")                  // true
 // ```
 pub fn both<T>(a: Matcher<T>, b: Matcher<T>) -> Matcher<T>
-    todo("matchers-nv.matchcombine.both")
+    all_of([a, b])
 
 // One or the other.
 //
@@ -127,7 +127,7 @@ pub fn both<T>(a: Matcher<T>, b: Matcher<T>) -> Matcher<T>
 //     println("${matchers.matches(m, 4)}")                  // false
 // ```
 pub fn either<T>(a: Matcher<T>, b: Matcher<T>) -> Matcher<T>
-    todo("matchers-nv.matchcombine.either")
+    any_of([a, b])
 
 // A matcher over the part of a value another function extracts.
 //
@@ -166,7 +166,8 @@ pub fn either<T>(a: Matcher<T>, b: Matcher<T>) -> Matcher<T>
 //     // : total equal to 42
 // ```
 pub fn field_of<T, F>(label: Str, read: fn(T) -> F, inner: Matcher<F>) -> Matcher<T>
-    todo("matchers-nv.matchcombine.field_of")
+    Matcher { judge: x => judge_field(label, read, inner, x),
+        expected: label + " " + matchers.describe(inner) }
 
 // A matcher over a value another function derives.
 //
@@ -189,4 +190,53 @@ pub fn field_of<T, F>(label: Str, read: fn(T) -> F, inner: Matcher<F>) -> Matche
 //     println("${matchers.matches(m, 5)}")                  // true
 // ```
 pub fn after<T, F>(read: fn(T) -> F, inner: Matcher<F>) -> Matcher<T>
-    todo("matchers-nv.matchcombine.after")
+    Matcher { judge: x => judge_after(read, inner, x), expected: matchers.describe(inner) }
+
+// The matchers' descriptions joined, or `empty` when there are none.
+fn joined<T>(ms: [Matcher<T>], sep: Str, empty: Str) -> Str
+    if list.len(ms) == 0
+        return empty
+    var parts: [Str] = []
+    for m in ms
+        let d = m.expected
+        parts = list.push(parts, d)
+    str.join(parts, sep)
+
+// The judgement of `all_of`: the first clause that does not match.
+fn judge_all<T>(ms: [Matcher<T>], x: T) -> MatchOutcome
+    for m in ms
+        let o = matchers.check_that(x, m)
+        if not o.ok
+            return o
+    matchers.matched()
+
+// The judgement of `any_of`: every clause, and each distinct mismatch.
+fn judge_any<T>(ms: [Matcher<T>], x: T) -> MatchOutcome
+    var whys: [Str] = []
+    for m in ms
+        let o = matchers.check_that(x, m)
+        if o.ok
+            return matchers.matched()
+        let why = o.mismatch ?? ""
+        if not list.contains(whys, why)
+            whys = list.push(whys, why)
+    if list.len(whys) == 0
+        return matchers.mismatched("matched nothing, because there were no alternatives")
+    matchers.mismatched(str.join(whys, " and "))
+
+// The judgement of `is_not`.
+fn judge_not<T: Debug>(m: Matcher<T>, x: T) -> MatchOutcome
+    if matchers.matches(m, x)
+        return matchers.mismatched("was " + x.debug())
+    matchers.matched()
+
+// The judgement of `field_of`: the inner mismatch, labelled.
+fn judge_field<T, F>(label: Str, read: fn(T) -> F, inner: Matcher<F>, x: T) -> MatchOutcome
+    let o = matchers.check_that(read(x), inner)
+    if o.ok
+        return o
+    matchers.mismatched(label + " " + (o.mismatch ?? ""))
+
+// The judgement of `after`.
+fn judge_after<T, F>(read: fn(T) -> F, inner: Matcher<F>, x: T) -> MatchOutcome
+    matchers.check_that(read(x), inner)

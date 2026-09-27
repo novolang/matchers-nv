@@ -42,7 +42,7 @@ use matchers
 //     // : was 41
 // ```
 pub fn equal_to<T: Eq + Debug>(want: T) -> Matcher<T>
-    todo("matchers-nv.matchvalue.equal_to")
+    Matcher { judge: x => judge_equal(want, x), expected: "equal to " + want.debug() }
 
 // Not equal to a value.
 //
@@ -60,7 +60,7 @@ pub fn equal_to<T: Eq + Debug>(want: T) -> Matcher<T>
 //     // : anything but 42
 // ```
 pub fn not_equal_to<T: Eq + Debug>(unwanted: T) -> Matcher<T>
-    todo("matchers-nv.matchvalue.not_equal_to")
+    Matcher { judge: x => judge_unequal(unwanted, x), expected: "anything but " + unwanted.debug() }
 
 // Within `tolerance` of a value.
 //
@@ -87,7 +87,8 @@ pub fn not_equal_to<T: Eq + Debug>(unwanted: T) -> Matcher<T>
 //     // true
 // ```
 pub fn close_to(want: Float, tolerance: Float) -> Matcher<Float>
-    todo("matchers-nv.matchvalue.close_to")
+    let expected = "a number within " + str.from_float(tolerance) + " of " + str.from_float(want)
+    Matcher { judge: x => judge_close(want, tolerance, x), expected: expected }
 
 // Greater than a value.
 //
@@ -100,7 +101,8 @@ pub fn close_to(want: Float, tolerance: Float) -> Matcher<Float>
 //     // : greater than 17
 // ```
 pub fn greater_than<T: Ord + Debug>(bound: T) -> Matcher<T>
-    todo("matchers-nv.matchvalue.greater_than")
+    Matcher { judge: x => judge_order(bound, x, 1, false),
+        expected: "greater than " + bound.debug() }
 
 // Greater than or equal to a value.
 //
@@ -112,7 +114,7 @@ pub fn greater_than<T: Ord + Debug>(bound: T) -> Matcher<T>
 //     println("${matchers.matches(matchvalue.at_least(18), 18)}")      // true
 // ```
 pub fn at_least<T: Ord + Debug>(bound: T) -> Matcher<T>
-    todo("matchers-nv.matchvalue.at_least")
+    Matcher { judge: x => judge_order(bound, x, 1, true), expected: "at least " + bound.debug() }
 
 // Less than a value.
 //
@@ -124,7 +126,7 @@ pub fn at_least<T: Ord + Debug>(bound: T) -> Matcher<T>
 //     println("${matchers.matches(matchvalue.less_than(18), 18)}")     // false
 // ```
 pub fn less_than<T: Ord + Debug>(bound: T) -> Matcher<T>
-    todo("matchers-nv.matchvalue.less_than")
+    Matcher { judge: x => judge_order(bound, x, -1, false), expected: "less than " + bound.debug() }
 
 // Less than or equal to a value.
 //
@@ -136,7 +138,7 @@ pub fn less_than<T: Ord + Debug>(bound: T) -> Matcher<T>
 //     println("${matchers.matches(matchvalue.at_most(18), 18)}")       // true
 // ```
 pub fn at_most<T: Ord + Debug>(bound: T) -> Matcher<T>
-    todo("matchers-nv.matchvalue.at_most")
+    Matcher { judge: x => judge_order(bound, x, -1, true), expected: "at most " + bound.debug() }
 
 // Within a range, both ends included.
 //
@@ -159,7 +161,10 @@ pub fn at_most<T: Ord + Debug>(bound: T) -> Matcher<T>
 //     // : between 1 and 65535
 // ```
 pub fn between<T: Ord + Debug>(lo: T, hi: T) -> Matcher<T>
-    todo("matchers-nv.matchvalue.between")
+    var expected = "between " + lo.debug() + " and " + hi.debug()
+    if lo > hi
+        expected = expected + ", which no value is, because the bounds are swapped"
+    Matcher { judge: x => judge_between(lo, hi, x), expected: expected }
 
 // True.
 //
@@ -175,7 +180,7 @@ pub fn between<T: Ord + Debug>(lo: T, hi: T) -> Matcher<T>
 //     println(matchers.describe(matchvalue.is_true()))                 // true
 // ```
 pub fn is_true() -> Matcher<Bool>
-    todo("matchers-nv.matchvalue.is_true")
+    Matcher { judge: judge_true, expected: "true" }
 
 // False.
 //
@@ -187,7 +192,7 @@ pub fn is_true() -> Matcher<Bool>
 //     println("${matchers.matches(matchvalue.is_false(), false)}")     // true
 // ```
 pub fn is_false() -> Matcher<Bool>
-    todo("matchers-nv.matchvalue.is_false")
+    Matcher { judge: judge_false, expected: "false" }
 
 // One of a list of values.
 //
@@ -206,4 +211,73 @@ pub fn is_false() -> Matcher<Bool>
 //     // : one of [2, 3, 5, 7]
 // ```
 pub fn one_of<T: Eq + Debug>(allowed: [T]) -> Matcher<T>
-    todo("matchers-nv.matchvalue.one_of")
+    Matcher { judge: x => judge_one_of(allowed, x), expected: "one of " + debug_list(allowed) }
+
+// A mismatch that names the value: "was 41".
+fn was<T: Debug>(value: T) -> MatchOutcome
+    matchers.mismatched("was " + value.debug())
+
+// A list as `Debug` would print it: `[2, 3, 5, 7]`.
+pub fn debug_list<T: Debug>(xs: [T]) -> Str
+    var parts: [Str] = []
+    for x in xs
+        let text = x.debug()
+        parts = list.push(parts, text)
+    "[" + str.join(parts, ", ") + "]"
+
+// Whether `x` is within `tolerance` of `want`, and by how much it
+// missed when it is not.
+fn judge_close(want: Float, tolerance: Float, x: Float) -> MatchOutcome
+    var diff = x - want
+    if diff < 0.0
+        diff = 0.0 - diff
+    if diff <= tolerance
+        return matchers.matched()
+    matchers.mismatched("was " + str.from_float(x) + ", which differs by " + str.from_float(diff))
+
+// The judgement of `is_true`.
+fn judge_true(b: Bool) -> MatchOutcome
+    if b
+        return matchers.matched()
+    matchers.mismatched("was false")
+
+// The judgement of `is_false`.
+fn judge_false(b: Bool) -> MatchOutcome
+    if not b
+        return matchers.matched()
+    matchers.mismatched("was true")
+
+// The judgement of `equal_to`.
+fn judge_equal<T: Eq + Debug>(want: T, x: T) -> MatchOutcome
+    if x == want
+        return matchers.matched()
+    was(x)
+
+// The judgement of `not_equal_to`.
+fn judge_unequal<T: Eq + Debug>(unwanted: T, x: T) -> MatchOutcome
+    if x != unwanted
+        return matchers.matched()
+    was(x)
+
+// The judgement of the four ordering matchers: `x` on the `side` of
+// `bound` (1 above, -1 below), or equal to it when `or_equal`.
+fn judge_order<T: Ord + Debug>(bound: T, x: T, side: Int, or_equal: Bool) -> MatchOutcome
+    if or_equal and x == bound
+        return matchers.matched()
+    if side > 0 and x > bound
+        return matchers.matched()
+    if side < 0 and x < bound
+        return matchers.matched()
+    was(x)
+
+// The judgement of `between`.
+fn judge_between<T: Ord + Debug>(lo: T, hi: T, x: T) -> MatchOutcome
+    if x >= lo and x <= hi
+        return matchers.matched()
+    was(x)
+
+// The judgement of `one_of`.
+fn judge_one_of<T: Eq + Debug>(allowed: [T], x: T) -> MatchOutcome
+    if list.contains(allowed, x)
+        return matchers.matched()
+    was(x)

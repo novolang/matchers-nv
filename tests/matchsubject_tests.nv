@@ -186,7 +186,7 @@ fn test_a_result_matcher_tells_a_failure_from_a_wrong_value() [io]
     test.assert(matchers.matches(ok, Err("no")) == false)
 
     test.case("and the mismatch prints the error, which is the useful part")
-    test.assert(matchers.describe_mismatch(ok, Err("no")) == "was an error: no")
+    test.assert(matchers.describe_mismatch(ok, Err("no")) == "was an error: \"no\"")
 
     test.case("an Ok whose value matches — the four-line assertion, in one")
     let want: Matcher<Int> = matchvalue.equal_to(42)

@@ -96,7 +96,7 @@ pub struct MatchOutcome
 //         None    => println("no reason needed")            // this one
 // ```
 pub fn matched() -> MatchOutcome
-    todo("matchers-nv.matchers.matched")
+    MatchOutcome { ok: true, mismatch: None }
 
 // A judgement that did not match, with what was found.
 //
@@ -112,7 +112,7 @@ pub fn matched() -> MatchOutcome
 //     println("${matchers.mismatched("was 4").ok}")         // false
 // ```
 pub fn mismatched(why: Str) -> MatchOutcome
-    todo("matchers-nv.matchers.mismatched")
+    MatchOutcome { ok: false, mismatch: Some(why) }
 
 // A rule for judging a value, and the sentence that says what it wants.
 //
@@ -161,7 +161,7 @@ pub struct Matcher<T>
 //         matchers.mismatched("was ${n}")
 // ```
 pub fn matcher<T>(expected: Str, judge: fn(T) -> MatchOutcome) -> Matcher<T>
-    todo("matchers-nv.matchers.matcher")
+    Matcher { judge: judge, expected: expected }
 
 // Judge a value: did it match, and if not, what was it?
 //
@@ -179,7 +179,8 @@ pub fn matcher<T>(expected: Str, judge: fn(T) -> MatchOutcome) -> Matcher<T>
 //     println("${matchers.check_that(5, matchvalue.equal_to(5)).ok}")   // true
 // ```
 pub fn check_that<T>(value: T, m: Matcher<T>) -> MatchOutcome
-    todo("matchers-nv.matchers.check_that")
+    let judge = m.judge
+    judge(value)
 
 // Whether a value matches — hamcrest's `matches`.
 //
@@ -191,7 +192,7 @@ pub fn check_that<T>(value: T, m: Matcher<T>) -> MatchOutcome
 //     println("${matchers.matches(matchvalue.equal_to(5), 4)}")         // false
 // ```
 pub fn matches<T>(m: Matcher<T>, value: T) -> Bool
-    todo("matchers-nv.matchers.matches")
+    check_that(value, m).ok
 
 // What a matcher expects — hamcrest's `describe`.
 //
@@ -206,7 +207,7 @@ pub fn matches<T>(m: Matcher<T>, value: T) -> Bool
 //     println(matchers.describe(matchvalue.equal_to(5)))               // equal to 5
 // ```
 pub fn describe<T>(m: Matcher<T>) -> Str
-    todo("matchers-nv.matchers.describe")
+    m.expected
 
 // What a matcher found — hamcrest's `describeMismatch`.
 //
@@ -222,7 +223,7 @@ pub fn describe<T>(m: Matcher<T>) -> Str
 //     println(matchers.describe_mismatch(matchvalue.equal_to(5), 4))   // was 4
 // ```
 pub fn describe_mismatch<T>(m: Matcher<T>, value: T) -> Str
-    todo("matchers-nv.matchers.describe_mismatch")
+    check_that(value, m).mismatch ?? ""
 
 // **Assert that a value matches, and fail with a sentence if it does
 // not.**
@@ -253,7 +254,9 @@ pub fn describe_mismatch<T>(m: Matcher<T>, value: T) -> Str
 //     println("three entries")
 // ```
 pub fn assert_that<T>(value: T, m: Matcher<T>)
-    todo("matchers-nv.matchers.assert_that")
+    let outcome = check_that(value, m)
+    if not outcome.ok
+        test.fail(failure_text("", m.expected, outcome.mismatch ?? ""))
 
 // Assert, and name the thing being asserted about.
 //
@@ -279,7 +282,9 @@ pub fn assert_that<T>(value: T, m: Matcher<T>)
 //     println("the total is right")
 // ```
 pub fn assert_that_named<T>(what: Str, value: T, m: Matcher<T>)
-    todo("matchers-nv.matchers.assert_that_named")
+    let outcome = check_that(value, m)
+    if not outcome.ok
+        test.fail(failure_text(what, m.expected, outcome.mismatch ?? ""))
 
 // The sentence a failure is reported as.
 //
@@ -298,7 +303,10 @@ pub fn assert_that_named<T>(what: Str, value: T, m: Matcher<T>)
 //     // : expected equal to 42, but was 41
 // ```
 pub fn failure_text(what: Str, expected: Str, mismatch: Str) -> Str
-    todo("matchers-nv.matchers.failure_text")
+    let sentence = "expected " + expected + ", but " + mismatch
+    if what == ""
+        return sentence
+    what + ": " + sentence
 
 // The same matcher, saying something else about itself.
 //
@@ -317,7 +325,7 @@ pub fn failure_text(what: Str, expected: Str, mismatch: Str) -> Str
 //     println(matchers.describe(m))                          // a valid port
 // ```
 pub fn described_as<T>(expected: Str, m: Matcher<T>) -> Matcher<T>
-    todo("matchers-nv.matchers.described_as")
+    Matcher { judge: m.judge, expected: expected }
 
 // A matcher that accepts everything.
 //
@@ -336,7 +344,7 @@ pub fn described_as<T>(expected: Str, m: Matcher<T>) -> Matcher<T>
 //     println("${matchers.matches(m, 5)}")                             // true
 // ```
 pub fn anything<T>() -> Matcher<T>
-    todo("matchers-nv.matchers.anything")
+    matcher("anything", accept_any)
 
 // A matcher that accepts nothing.
 //
@@ -352,4 +360,12 @@ pub fn anything<T>() -> Matcher<T>
 //     println("${matchers.matches(m, 5)}")                             // false
 // ```
 pub fn nothing_at_all<T>() -> Matcher<T>
-    todo("matchers-nv.matchers.nothing_at_all")
+    matcher("nothing", refuse_any)
+
+// The judgement `anything` makes of every value.
+fn accept_any<T>(value: T) -> MatchOutcome
+    matched()
+
+// The judgement `nothing_at_all` makes of every value.
+fn refuse_any<T>(value: T) -> MatchOutcome
+    mismatched("was given a value")

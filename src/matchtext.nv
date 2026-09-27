@@ -49,7 +49,8 @@ use matchers
 //     // : a string starting with "Bearer "
 // ```
 pub fn starts_with(prefix: Str) -> Matcher<Str>
-    todo("matchers-nv.matchtext.starts_with")
+    Matcher { judge: s => judged(str.starts_with(s, prefix), s),
+        expected: "a string starting with " + prefix.debug() }
 
 // Ends with a suffix.
 //
@@ -62,7 +63,8 @@ pub fn starts_with(prefix: Str) -> Matcher<Str>
 //     println("${hit}")                                     // true
 // ```
 pub fn ends_with(suffix: Str) -> Matcher<Str>
-    todo("matchers-nv.matchtext.ends_with")
+    Matcher { judge: s => judged(str.ends_with(s, suffix), s),
+        expected: "a string ending with " + suffix.debug() }
 
 // Contains a substring.
 //
@@ -84,7 +86,8 @@ pub fn ends_with(suffix: Str) -> Matcher<Str>
 //     println("${hit}")                                     // true
 // ```
 pub fn contains_text(part: Str) -> Matcher<Str>
-    todo("matchers-nv.matchtext.contains_text")
+    Matcher { judge: s => judged(str.contains(s, part), s),
+        expected: "a string containing " + part.debug() }
 
 // Equal, ignoring ASCII case.
 //
@@ -104,7 +107,8 @@ pub fn contains_text(part: Str) -> Matcher<Str>
 //     println("${hit}")                                     // true
 // ```
 pub fn equal_ignoring_case(want: Str) -> Matcher<Str>
-    todo("matchers-nv.matchtext.equal_ignoring_case")
+    Matcher { judge: s => judged(ascii_lower(s) == ascii_lower(want), s),
+        expected: "equal to " + want.debug() + ", ignoring case" }
 
 // Equal, ignoring leading and trailing whitespace on both sides.
 //
@@ -120,7 +124,8 @@ pub fn equal_ignoring_case(want: Str) -> Matcher<Str>
 //     println("${hit}")                                     // true
 // ```
 pub fn equal_trimmed(want: Str) -> Matcher<Str>
-    todo("matchers-nv.matchtext.equal_trimmed")
+    Matcher { judge: s => judged(str.trim(s) == str.trim(want), s),
+        expected: "equal to " + want.debug() + ", ignoring surrounding whitespace" }
 
 // The empty string.
 //
@@ -133,7 +138,7 @@ pub fn equal_trimmed(want: Str) -> Matcher<Str>
 //     println("${hit}")                                     // true
 // ```
 pub fn is_blank() -> Matcher<Str>
-    todo("matchers-nv.matchtext.is_blank")
+    Matcher { judge: s => judged(str.len(s) == 0, s), expected: "the empty string" }
 
 // A string of exactly `n` bytes.
 //
@@ -151,7 +156,8 @@ pub fn is_blank() -> Matcher<Str>
 //     // : a string of 3 byte(s)
 // ```
 pub fn has_text_length(n: Int) -> Matcher<Str>
-    todo("matchers-nv.matchtext.has_text_length")
+    Matcher { judge: s => judge_length(n, s),
+        expected: "a string of " + str.from_int(n) + " byte(s)" }
 
 // The whole string matches a pattern.
 //
@@ -173,7 +179,8 @@ pub fn has_text_length(n: Int) -> Matcher<Str>
 //     println("${hit}")                                     // true
 // ```
 pub fn matches_regex(pattern: Str) -> Matcher<Str>
-    todo("matchers-nv.matchtext.matches_regex")
+    Matcher { judge: s => judge_regex(pattern, s, true),
+        expected: "a string matching the pattern " + pattern.debug() }
 
 // Some part of the string matches a pattern.
 //
@@ -191,7 +198,8 @@ pub fn matches_regex(pattern: Str) -> Matcher<Str>
 //     println("${hit}")                                     // true
 // ```
 pub fn contains_regex(pattern: Str) -> Matcher<Str>
-    todo("matchers-nv.matchtext.contains_regex")
+    Matcher { judge: s => judge_regex(pattern, s, false),
+        expected: "a string containing a match of the pattern " + pattern.debug() }
 
 // Whether a pattern compiles, without building a matcher.
 //
@@ -207,7 +215,7 @@ pub fn contains_regex(pattern: Str) -> Matcher<Str>
 //     println("${ok}")                                      // false
 // ```
 pub fn is_valid_pattern(pattern: Str) -> Bool
-    todo("matchers-nv.matchtext.is_valid_pattern")
+    regex.error(pattern) == None
 
 // The construct in a pattern that is this toolchain's rather than
 // portable, if any.
@@ -234,4 +242,84 @@ pub fn is_valid_pattern(pattern: Str) -> Bool
 //     // : anchor
 // ```
 pub fn unportable_construct(pattern: Str) -> ?Str
-    todo("matchers-nv.matchtext.unportable_construct")
+    let n = str.len(pattern)
+    var in_class = false
+    // How many of the following bytes an escape has already consumed.
+    var skip = 0
+    for i in 0..n
+        if skip > 0
+            skip = skip - 1
+            continue
+        let c = str.byte_at_or(pattern, i, 0)
+        let next = str.byte_at_or(pattern, i + 1, 0)
+        if c == '\\'
+            if next == 'b' or next == 'B'
+                return Some("word boundary")
+            if next >= '1' and next <= '9'
+                return Some("backreference")
+            if next == 'd' or next == 'D' or next == 'w' or next == 'W' or next == 's' or next == 'S'
+                return Some("shorthand class")
+            if next == 'A' or next == 'z' or next == 'Z'
+                return Some("anchor")
+            skip = 1
+        else if in_class
+            if c == '[' and next == ':'
+                return Some("POSIX class")
+            if c == ']'
+                in_class = false
+        else if c == '['
+            in_class = true
+        else if c == '^' or c == '$'
+            return Some("anchor")
+        else if c == '(' and next == '?'
+            let third = str.byte_at_or(pattern, i + 2, 0)
+            if third == '=' or third == '!' or third == '<'
+                return Some("lookaround")
+            return Some("group option")
+        else if (c == '*' or c == '+' or c == '?' or c == '}') and next == '?'
+            return Some("lazy quantifier")
+    None
+
+// The longest string a mismatch prints in full.
+const SHOWN_MAX = 64
+
+// A subject as a mismatch prints it: in full when it is short, and as
+// its first bytes and its length when it is long.
+pub fn shown(s: Str) -> Str
+    if str.len(s) <= SHOWN_MAX
+        return s.debug()
+    str.slice(s, 0, SHOWN_MAX).debug() + "... (" + str.from_int(str.len(s)) + " bytes)"
+
+// A verdict already reached, with the subject as the mismatch.
+fn judged(ok: Bool, s: Str) -> MatchOutcome
+    if ok
+        return matchers.matched()
+    matchers.mismatched("was " + shown(s))
+
+// A string with ASCII upper case folded to lower case and every other
+// byte kept.
+fn ascii_lower(s: Str) -> Str
+    var out = ""
+    for i in 0..str.len(s)
+        let b = str.byte_at_or(s, i, 0)
+        if b >= 'A' and b <= 'Z'
+            out = out + str.from_byte(b + 32)
+        else
+            out = out + str.from_byte(b)
+    out
+
+// The judgement of `has_text_length`.
+fn judge_length(n: Int, s: Str) -> MatchOutcome
+    if str.len(s) == n
+        return matchers.matched()
+    matchers.mismatched("was a string of " + str.from_int(str.len(s)) + " byte(s)")
+
+// The judgement of the two regular-expression matchers.
+fn judge_regex(pattern: Str, s: Str, whole: Bool) -> MatchOutcome
+    if let Some(why) = regex.error(pattern)
+        return matchers.mismatched("could not be judged, because the pattern does not compile: " + why)
+    let hit = if whole
+        regex.match_full(pattern, s)
+    else
+        regex.is_match(pattern, s)
+    judged(hit, s)

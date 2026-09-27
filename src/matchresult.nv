@@ -46,7 +46,7 @@ use matchers
 //     println("${matchers.matches(m, Ok(42))}")             // true
 // ```
 pub fn is_ok<T, E: Debug>() -> Matcher<Result<T, E>>
-    todo("matchers-nv.matchresult.is_ok")
+    Matcher { judge: judge_ok, expected: "an Ok" }
 
 // An `Ok` whose value matches.
 //
@@ -67,7 +67,8 @@ pub fn is_ok<T, E: Debug>() -> Matcher<Result<T, E>>
 //     println("${matchers.matches(m, Ok(41))}")             // false
 // ```
 pub fn is_ok_with<T, E: Debug>(inner: Matcher<T>) -> Matcher<Result<T, E>>
-    todo("matchers-nv.matchresult.is_ok_with")
+    let judge: fn(Result<T, E>) -> MatchOutcome = r => judge_ok_with(inner, r)
+    Matcher { judge: judge, expected: "Ok(" + matchers.describe(inner) + ")" }
 
 // An `Err`, with any error.
 //
@@ -87,7 +88,7 @@ pub fn is_ok_with<T, E: Debug>(inner: Matcher<T>) -> Matcher<Result<T, E>>
 //     println("${matchers.matches(m, Ok(42))}")             // false
 // ```
 pub fn is_err<T: Debug, E>() -> Matcher<Result<T, E>>
-    todo("matchers-nv.matchresult.is_err")
+    Matcher { judge: judge_err, expected: "an error" }
 
 // An `Err` whose error matches.
 //
@@ -106,7 +107,8 @@ pub fn is_err<T: Debug, E>() -> Matcher<Result<T, E>>
 //     println("${matchers.matches(m, Err("no"))}")          // true
 // ```
 pub fn is_err_with<T: Debug, E>(inner: Matcher<E>) -> Matcher<Result<T, E>>
-    todo("matchers-nv.matchresult.is_err_with")
+    let judge: fn(Result<T, E>) -> MatchOutcome = r => judge_err_with(inner, r)
+    Matcher { judge: judge, expected: "Err(" + matchers.describe(inner) + ")" }
 
 // A `Some`, with any value.
 //
@@ -119,7 +121,7 @@ pub fn is_err_with<T: Debug, E>(inner: Matcher<E>) -> Matcher<Result<T, E>>
 //     println("${matchers.matches(m, Some(5))}")            // true
 // ```
 pub fn is_some<T>() -> Matcher<?T>
-    todo("matchers-nv.matchresult.is_some")
+    Matcher { judge: judge_some, expected: "a Some" }
 
 // A `Some` whose value matches.
 //
@@ -134,7 +136,8 @@ pub fn is_some<T>() -> Matcher<?T>
 //     // : Some(equal to 5)
 // ```
 pub fn is_some_with<T>(inner: Matcher<T>) -> Matcher<?T>
-    todo("matchers-nv.matchresult.is_some_with")
+    let judge: fn(?T) -> MatchOutcome = o => judge_some_with(inner, o)
+    Matcher { judge: judge, expected: "Some(" + matchers.describe(inner) + ")" }
 
 // A `None`.
 //
@@ -151,7 +154,7 @@ pub fn is_some_with<T>(inner: Matcher<T>) -> Matcher<?T>
 //     // : was Some(5)
 // ```
 pub fn is_none<T: Debug>() -> Matcher<?T>
-    todo("matchers-nv.matchresult.is_none")
+    Matcher { judge: judge_none, expected: "None" }
 
 // The value inside an `Ok`, judged by a matcher, with the `Err` side
 // counted as a mismatch.
@@ -174,4 +177,51 @@ pub fn is_none<T: Debug>() -> Matcher<?T>
 //     println("${matchers.matches(m, Ok(42))}")             // true
 // ```
 pub fn unwrapped<T, E: Debug>(inner: Matcher<T>) -> Matcher<Result<T, E>>
-    todo("matchers-nv.matchresult.unwrapped")
+    let judge: fn(Result<T, E>) -> MatchOutcome = r => judge_ok_with(inner, r)
+    Matcher { judge: judge, expected: matchers.describe(inner) }
+
+// The judgement of `is_ok`.
+fn judge_ok<T, E: Debug>(r: Result<T, E>) -> MatchOutcome
+    match r
+        Ok(_)  => matchers.matched()
+        Err(e) => matchers.mismatched("was an error: " + e.debug())
+
+// The judgement of `is_ok_with` and `unwrapped`.
+fn judge_ok_with<T, E: Debug>(inner: Matcher<T>, r: Result<T, E>) -> MatchOutcome
+    match r
+        Ok(v)  => matchers.check_that(v, inner)
+        Err(e) => matchers.mismatched("was an error: " + e.debug())
+
+// The judgement of `is_err`.
+fn judge_err<T: Debug, E>(r: Result<T, E>) -> MatchOutcome
+    match r
+        Ok(v)  => matchers.mismatched("was Ok(" + v.debug() + ")")
+        Err(_) => matchers.matched()
+
+// The judgement of `is_err_with`.
+fn judge_err_with<T: Debug, E>(inner: Matcher<E>, r: Result<T, E>) -> MatchOutcome
+    match r
+        Ok(v)  => matchers.mismatched("was Ok(" + v.debug() + ")")
+        Err(e) =>
+            let o = matchers.check_that(e, inner)
+            if o.ok
+                return o
+            matchers.mismatched("error " + (o.mismatch ?? ""))
+
+// The judgement of `is_some`.
+fn judge_some<T>(o: ?T) -> MatchOutcome
+    match o
+        Some(_) => matchers.matched()
+        None    => matchers.mismatched("was None")
+
+// The judgement of `is_some_with`.
+fn judge_some_with<T>(inner: Matcher<T>, o: ?T) -> MatchOutcome
+    match o
+        Some(v) => matchers.check_that(v, inner)
+        None    => matchers.mismatched("was None")
+
+// The judgement of `is_none`.
+fn judge_none<T: Debug>(o: ?T) -> MatchOutcome
+    match o
+        Some(v) => matchers.mismatched("was Some(" + v.debug() + ")")
+        None    => matchers.matched()
