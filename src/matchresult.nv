@@ -1,33 +1,24 @@
 // matchresult.nv — the matchers over a `Result` and an optional.
 //
-// THE ASSERTION THIS MODULE REPLACES IS THE WORST ONE IN A SUITE:
+// A match written by hand over a `Result`,
 //
 //     match parse(text)
 //         Err(_) => test.assert(false)
 //         Ok(v)  => test.assert(v == 42)
 //
-// Four lines, and when it fails it says `expected true` — with no way to
-// tell "it did not parse" from "it parsed to 41", which are different
-// bugs.  `matchers.assert_that(parse(text), matchresult.is_ok_with(
-// matchvalue.equal_to(42)))` is one line and fails with either
-// `"was an error: unexpected end of input"` or `"was Ok(41)"`.
+// fails with `expected true` whether the text did not parse or parsed
+// to 41.  `is_ok_with(matchvalue.equal_to(42))` fails with
+// `was an error: ...` in the first case and `was 41` in the second.
 //
-// WHY THE ERROR SIDE IS TWO MATCHERS.  `is_err` says only that it
-// failed, which is what most tests of a refusal mean; `is_err_with`
-// takes a matcher over the error, which is what a test of a SPECIFIC
-// refusal means.  Keeping them apart matters because `is_err` alone is
-// the assertion that passes for the wrong reason more often than any
-// other in a suite — a function that started failing for a new reason
-// still satisfies it.  This module cannot stop that; naming the two
-// separately at least makes the weaker one visible in the test's own
-// text.
+// The error side has two matchers.  `is_err` passes for any error, so
+// it still passes when a function starts failing for another reason.
+// `is_err_with` takes a matcher over the error, for a test about one
+// refusal.
 //
-// BOTH TYPE PARAMETERS ARE NAMED EVEN WHERE ONE IS UNUSED.
-// `is_ok<T, E>` has to mention `E` because the value it judges is a
-// `Result<T, E>`, and there is nothing in the call to close it from — so
-// a call site binds it with an annotation or by flowing into a concrete
-// position.  That is the language's inference and not this package's
-// choice, and the README says where it shows.
+// `is_ok<T, E>` names both type parameters, because the value it judges
+// is a `Result<T, E>`.  Neither appears in an argument, so a call site
+// closes them from an annotated binding or another typed position
+// (error E2016).
 
 use matchers
 
@@ -50,11 +41,9 @@ pub fn is_ok<T, E: Debug>() -> Matcher<Result<T, E>>
 
 // An `Ok` whose value matches.
 //
-// **The one this module exists for.**  One assertion where the
-// hand-written form is four lines, and one message that distinguishes
-// "did not succeed" from "succeeded with the wrong value" — which the
-// hand-written form cannot, because by the time it reaches
-// `test.assert(v == 42)` it has already thrown the error away.
+// Its mismatch tells "did not succeed" from "succeeded with the wrong
+// value": `was an error: ...` in the first case, and the inner
+// matcher's mismatch in the second.
 //
 // ```novo
 // use matchers
@@ -67,17 +56,14 @@ pub fn is_ok<T, E: Debug>() -> Matcher<Result<T, E>>
 //     println("${matchers.matches(m, Ok(41))}")             // false
 // ```
 pub fn is_ok_with<T, E: Debug>(inner: Matcher<T>) -> Matcher<Result<T, E>>
-    let judge: fn(Result<T, E>) -> MatchOutcome = r => judge_ok_with(inner, r)
-    Matcher { judge: judge, expected: "Ok(" + matchers.describe(inner) + ")" }
+    Matcher { judge: r => judge_ok_with(inner, r),
+        expected: "Ok(" + matchers.describe(inner) + ")" }
 
 // An `Err`, with any error.
 //
-// **The weakest assertion in this package, and it says so.**  A test
-// that asserts only this keeps passing when the function starts failing
-// for an unrelated reason, which is the failure mode of every
-// "expect an error" test ever written.  `is_err_with` is the one to
-// reach for when the test knows which error it means — and it almost
-// always does.
+// A test that asserts only this keeps passing when the function starts
+// failing for another reason.  `is_err_with` takes a matcher over the
+// error, for a test that knows which error it means.
 //
 // ```novo
 // use matchers
@@ -92,9 +78,8 @@ pub fn is_err<T: Debug, E>() -> Matcher<Result<T, E>>
 
 // An `Err` whose error matches.
 //
-// The error side of `is_ok_with`, and the assertion a test of a
-// refusal should be written with: not "it failed" but "it failed with
-// `BadMagic` at byte zero".
+// The error side of `is_ok_with`, for a test about one refusal: not
+// "it failed" but "it failed with `BadMagic` at byte zero".
 //
 // ```novo
 // use matchers
@@ -107,8 +92,8 @@ pub fn is_err<T: Debug, E>() -> Matcher<Result<T, E>>
 //     println("${matchers.matches(m, Err("no"))}")          // true
 // ```
 pub fn is_err_with<T: Debug, E>(inner: Matcher<E>) -> Matcher<Result<T, E>>
-    let judge: fn(Result<T, E>) -> MatchOutcome = r => judge_err_with(inner, r)
-    Matcher { judge: judge, expected: "Err(" + matchers.describe(inner) + ")" }
+    Matcher { judge: r => judge_err_with(inner, r),
+        expected: "Err(" + matchers.describe(inner) + ")" }
 
 // A `Some`, with any value.
 //
@@ -136,13 +121,12 @@ pub fn is_some<T>() -> Matcher<?T>
 //     // : Some(equal to 5)
 // ```
 pub fn is_some_with<T>(inner: Matcher<T>) -> Matcher<?T>
-    let judge: fn(?T) -> MatchOutcome = o => judge_some_with(inner, o)
-    Matcher { judge: judge, expected: "Some(" + matchers.describe(inner) + ")" }
+    Matcher { judge: o => judge_some_with(inner, o),
+        expected: "Some(" + matchers.describe(inner) + ")" }
 
 // A `None`.
 //
-// The mismatch prints what was there instead, which is the whole
-// question a failing "should be absent" test raises.
+// The mismatch prints the value that was there instead.
 //
 // ```novo
 // use matchers
@@ -159,12 +143,11 @@ pub fn is_none<T: Debug>() -> Matcher<?T>
 // The value inside an `Ok`, judged by a matcher, with the `Err` side
 // counted as a mismatch.
 //
-// `is_ok_with` under another name?  No: this is the projection form, for
-// composing INTO something else.  `matchcombine.field_of("parsed",
-// read_parsed, matchresult.unwrapped(matchvalue.equal_to(42)))` reads a
-// `Result` field of a struct and judges its value, which the assertion
-// forms cannot do because they are the outermost matcher by
-// construction.
+// It judges like `is_ok_with` and describes itself with the inner
+// matcher's sentence alone, so it reads well inside another matcher.
+// `matchcombine.field_of("parsed", read_parsed,
+// matchresult.unwrapped(matchvalue.equal_to(42)))` reads a `Result`
+// field of a struct and judges the value inside it.
 //
 // ```novo
 // use matchers
@@ -177,8 +160,7 @@ pub fn is_none<T: Debug>() -> Matcher<?T>
 //     println("${matchers.matches(m, Ok(42))}")             // true
 // ```
 pub fn unwrapped<T, E: Debug>(inner: Matcher<T>) -> Matcher<Result<T, E>>
-    let judge: fn(Result<T, E>) -> MatchOutcome = r => judge_ok_with(inner, r)
-    Matcher { judge: judge, expected: matchers.describe(inner) }
+    Matcher { judge: r => judge_ok_with(inner, r), expected: matchers.describe(inner) }
 
 // The judgement of `is_ok`.
 fn judge_ok<T, E: Debug>(r: Result<T, E>) -> MatchOutcome

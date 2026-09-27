@@ -1,30 +1,20 @@
-// matchvalue.nv — the matchers over one value: equality, ordering,
+// matchvalue.nv — the matchers over one value: equality, ordering and
 // closeness.
 //
-// THE BOUNDS ARE WHERE THE DESIGN SHOWS.  `equal_to` needs to compare
-// and to print, so it is `<T: Eq + Debug>`; the ordering matchers need
-// a total order too, so they are `<T: Ord + Debug>`.  Both bounds name
-// traits with no type argument, which is the only kind SPEC § 3.6's
-// grammar has — the matcher itself is a struct rather than a trait for
-// exactly that reason, and the constructors are where the traits are
-// still usable.
+// `equal_to` compares and prints, so it asks for `T: Eq + Debug`.  The
+// ordering matchers also need a total order, so they ask for
+// `T: Ord + Debug`.
 //
-// `Debug` RATHER THAN `Display`, and the choice matters: SPEC § 3.8.1
-// gives every struct and enum a `Debug` implicitly wherever its fields
-// have one, so `equal_to(some_invoice)` prints that invoice without the
-// caller writing anything.  `Display` is a trait a type opts into, and
-// requiring it would mean a matcher over a caller's own type did not
-// compile until the caller wrote a formatter — which is a bad first
-// experience for the one library whose job is a readable message.  For
-// the four primitives the two agree.
+// A matcher prints the value it judged with `Debug`, not `Display`.
+// SPEC section 3.8.1 gives `Debug` to every struct and enum whose fields
+// have it, so `equal_to` over a caller's own type prints that type
+// without a formatter.  For the primitive types the two agree.
 //
-// FLOATING POINT IS THE ONE PLACE A MATCHER LIBRARY EARNS ITS KEEP.
-// `equal_to(0.1 + 0.2)` against `0.3` is false and every person writing
-// it believed otherwise, so `close_to` is here with an explicit
-// tolerance and no default — because the right tolerance is a property
-// of the calculation and not of this package, and a default would be
-// this package guessing about somebody's numerics.  `test.assert_approx`
-// in the standard library takes one for the same reason.
+// `close_to` compares floating-point numbers within a tolerance the
+// caller gives, because `0.1 + 0.2` is not equal to `0.3`.  There is no
+// default tolerance: the right one depends on the calculation.
+// `test.assert_approx` in the standard library takes one for the same
+// reason.
 
 use matchers
 
@@ -46,10 +36,9 @@ pub fn equal_to<T: Eq + Debug>(want: T) -> Matcher<T>
 
 // Not equal to a value.
 //
-// `matchcombine.is_not(equal_to(x))` says the same thing and reads
-// worse — "expected not equal to 4" rather than "expected anything but
-// 4" — so this exists to write the better sentence rather than to add a
-// capability.
+// `matchcombine.is_not(equal_to(x))` judges the same way.  This one's
+// sentence is "expected anything but 4" rather than "expected not equal
+// to 4".
 //
 // ```novo
 // use matchers
@@ -64,19 +53,12 @@ pub fn not_equal_to<T: Eq + Debug>(unwanted: T) -> Matcher<T>
 
 // Within `tolerance` of a value.
 //
-// **The matcher a floating-point test actually wants.**  `0.1 + 0.2` is
-// not `0.3` and never will be, so an equality assertion over a computed
-// `Float` is a test that fails for a reason unrelated to the code it is
-// testing.
+// `0.1 + 0.2` is not `0.3`, so an equality assertion over a computed
+// `Float` fails for a reason unrelated to the code under test.  The
+// bound is inclusive.  There is no default tolerance, because the right
+// one depends on the calculation.
 //
-// There is no default tolerance, deliberately: the right one is a
-// property of the calculation — how many operations, over what
-// magnitudes — and a default would be this package guessing about
-// somebody else's numerics and being wrong quietly.
-//
-// The mismatch names the difference as well as the value, because
-// "was 0.30000000000000004" alone does not tell a reader whether they
-// need a bigger tolerance or a different algorithm.
+// The mismatch names the difference as well as the value.
 //
 // ```novo
 // use matchers
@@ -142,15 +124,12 @@ pub fn at_most<T: Ord + Debug>(bound: T) -> Matcher<T>
 
 // Within a range, both ends included.
 //
-// Inclusive at both ends because that is what a person writing
-// `between(1, 65535)` means, and because an exclusive upper bound
-// spelled `between` is the off-by-one every range API has argued about.
-// A caller who wants a half-open range says
+// A half-open range is
 // `matchcombine.all_of([at_least(lo), less_than(hi)])`.
 //
-// `Lo` above `hi` is not a refusal — a matcher has nowhere to put one —
-// but it matches nothing, and its description says so, so a test with
-// its bounds swapped fails with a message that names the mistake.
+// `lo` above `hi` matches nothing, and the description says so, so a
+// test with its bounds swapped fails with a message that names the
+// mistake.
 //
 // ```novo
 // use matchers
@@ -168,8 +147,8 @@ pub fn between<T: Ord + Debug>(lo: T, hi: T) -> Matcher<T>
 
 // True.
 //
-// `equal_to(true)` says the same thing; this reads better in the place
-// it is used, which is a predicate the test has already named —
+// `equal_to(true)` judges the same way.  This one reads better beside a
+// predicate the test has named:
 // `assert_that_named("the account is locked", locked, matchvalue.is_true())`.
 //
 // ```novo
@@ -196,9 +175,8 @@ pub fn is_false() -> Matcher<Bool>
 
 // One of a list of values.
 //
-// `matchcombine.any_of` over a list of `equal_to`s says the same thing
-// and its generated description is a sentence nobody wants to read.
-// This one says `one of [2, 3, 5, 7]`.
+// `matchcombine.any_of` over a list of `equal_to`s judges the same way.
+// This one's description is `one of [2, 3, 5, 7]`.
 //
 // An empty list matches nothing, and says so.
 //
@@ -219,11 +197,7 @@ fn was<T: Debug>(value: T) -> MatchOutcome
 
 // A list as `Debug` would print it: `[2, 3, 5, 7]`.
 pub fn debug_list<T: Debug>(xs: [T]) -> Str
-    var parts: [Str] = []
-    for x in xs
-        let text = x.debug()
-        parts = list.push(parts, text)
-    "[" + str.join(parts, ", ") + "]"
+    "[" + str.join(list.map(xs, x => x.debug()), ", ") + "]"
 
 // Whether `x` is within `tolerance` of `want`, and by how much it
 // missed when it is not.

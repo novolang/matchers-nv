@@ -1,9 +1,7 @@
 // matchcombine.nv — the combinators: matchers built out of matchers.
 //
-// THIS MODULE IS THE ARGUMENT FOR THE WHOLE PACKAGE.  A single
-// assertion is `test.assert(a == b)` and needs nothing.  What needs a
-// library is the one that says four things about a value and, when it
-// fails, says which of the four and what was there instead:
+// A combinator says several things about one value, and its failure
+// names the clause that failed:
 //
 //     matchers.assert_that(port, matchcombine.all_of([
 //         matchvalue.at_least(1),
@@ -11,23 +9,15 @@
 //         matchvalue.not_equal_to(0),
 //     ]))
 //
-// A failure from that names the clause that failed, not the whole
-// conjunction — which is the difference between "expected true" and
-// "expected at most 65535, but was 70000".
+// For a port of 70000 the mismatch is `was 70000`, the clause
+// `at most 65535`'s own.
 //
-// `all_of` SHORT-CIRCUITS AND `any_of` DOES NOT, and that asymmetry is
-// on purpose.  `all_of` stops at the first failure because the
-// remaining clauses are about a value already known to be wrong, and
-// reporting five reasons when the first explains it is noise.  `any_of`
-// runs every alternative because a failure there has to say what ALL of
-// them wanted — "expected one of: a, b, c, but was d" — and it cannot
-// know which alternative the caller had in mind.
+// `all_of` stops at the first clause that fails, because the rest judge
+// a value already known to be wrong.  `any_of` runs every clause,
+// because its failure says what each alternative found.
 //
-// EVERY COMBINATOR TAKES A LIST RATHER THAN TWO ARGUMENTS.  `both(a, b)`
-// and `either(a, b)` are here because they read better for exactly two,
-// and they are defined as the list forms rather than the other way
-// round: one implementation, and a caller with three clauses does not
-// have to nest.
+// Each combinator takes a list.  `both(a, b)` and `either(a, b)` are
+// the list forms for two clauses.
 
 use matchers
 
@@ -53,8 +43,8 @@ pub fn all_of<T>(ms: [Matcher<T>]) -> Matcher<T>
 
 // At least one of them.
 //
-// Does NOT short-circuit: every alternative is judged, because a
-// failure has to say what all of them wanted.  An empty list matches
+// Every alternative is judged, because a failure says what each of
+// them found.  An empty list matches
 // nothing, which is the identity `matchers.nothing_at_all` also gives.
 //
 // ```novo
@@ -73,16 +63,12 @@ pub fn any_of<T>(ms: [Matcher<T>]) -> Matcher<T>
 //
 // Named `is_not` rather than `not`, because `not` is the language's
 // boolean operator and a function cannot take the name.  The
-// description is the inner matcher's with "not" in front, which reads
-// acceptably for everything and well for nothing — a caller who wants a
-// good sentence out of a negation uses `matchers.described_as`, and
-// `matchvalue.not_equal_to` exists because the negation of equality was
-// common enough to deserve its own words.
+// description is the inner matcher's with "not" in front.
+// `matchers.described_as` gives a negation a better sentence, and
+// `matchvalue.not_equal_to` is the negation of equality in its own
+// words.
 //
-// The mismatch of a negated matcher is the hard one: what a reader
-// needs is not "it did not fail to match" but the value itself, so the
-// clause is `"was ${value}"` with the inner matcher's own description
-// of what it saw appended when it has one.
+// The mismatch is the value itself, `"was ${value}"`.
 //
 // ```novo
 // use matchers
@@ -131,20 +117,12 @@ pub fn either<T>(a: Matcher<T>, b: Matcher<T>) -> Matcher<T>
 
 // A matcher over the part of a value another function extracts.
 //
-// **This is `has_field`, and the language is why it does not take a
-// field NAME.**  hamcrest's `hasProperty("total", equalTo(42))` looks
-// up a field by string at run time, which needs reflection; this
-// language has none, and it has no row polymorphism either, so
-// `fn has_field<T>(name: Str, …) -> Matcher<T>` cannot be written at
-// all — there is no way for a body to get from a `Str` to a field of an
-// arbitrary `T`.
-//
-// What CAN be written is the same idea with the projection named
-// instead of the field: the caller passes `fn(T) -> F`, which is a
-// field access it writes itself, plus the label to print.  It costs one
-// short function per field and it is checked by the compiler, which the
-// string form never is — a typo in `"totl"` is a run-time failure in
-// hamcrest and a compile error here.
+// Hamcrest's `hasProperty("total", equalTo(42))` looks a field up by
+// name at run time, which needs reflection.  This language has no
+// reflection, so the caller passes a function `fn(T) -> F` that reads
+// the field, and a label to print.  The function is checked by the
+// compiler: a misspelled field is a build error here and a run-time
+// failure in Hamcrest.
 //
 // ```novo
 // use matchers
@@ -171,11 +149,10 @@ pub fn field_of<T, F>(label: Str, read: fn(T) -> F, inner: Matcher<F>) -> Matche
 
 // A matcher over a value another function derives.
 //
-// The same shape as `field_of` with no label: for a projection that is
-// a computation rather than a field — the length of something, the
-// second element, a parsed form — where naming it "field" would be a
-// lie.  The description is the inner matcher's, so the caller usually
-// wraps the result in `matchers.described_as`.
+// The same shape as `field_of` with no label, for a projection that is
+// a computation rather than a field: a length, a second element, a
+// parsed form.  The description is the inner matcher's, so a caller
+// usually wraps the result in `matchers.described_as`.
 //
 // ```novo
 // use matchers
@@ -199,7 +176,7 @@ fn joined<T>(ms: [Matcher<T>], sep: Str, empty: Str) -> Str
     var parts: [Str] = []
     for m in ms
         let d = m.expected
-        parts = list.push(parts, d)
+        list.push(parts, d)
     str.join(parts, sep)
 
 // The judgement of `all_of`: the first clause that does not match.
@@ -219,7 +196,7 @@ fn judge_any<T>(ms: [Matcher<T>], x: T) -> MatchOutcome
             return matchers.matched()
         let why = o.mismatch ?? ""
         if not list.contains(whys, why)
-            whys = list.push(whys, why)
+            list.push(whys, why)
     if list.len(whys) == 0
         return matchers.mismatched("matched nothing, because there were no alternatives")
     matchers.mismatched(str.join(whys, " and "))
